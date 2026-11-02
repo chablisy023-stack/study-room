@@ -199,7 +199,7 @@ function renderMap() {
   map.classList.toggle('room', view === 'room');
   const svg = $('map-svg');
   svg.setAttribute('viewBox', world ? '0 0 1000 560' : '0 0 1000 640');
-  svg.innerHTML = world ? worldSVG() : view === 'room' ? interiorSVG(curPlace().kind, L(curPlace())) : townSVG(curCity());
+  svg.innerHTML = world ? worldSVG() : view === 'room' ? interiorSVG(curPlace().kind, L(curPlace()), `${curCity().id}/${curPlace().id}`) : townSVG(curCity());
   const back = $('world-btn');
   back.hidden = world;
   back.dataset.action = view === 'room' ? 'town' : 'world';
@@ -243,7 +243,7 @@ function renderRoom() {
   $('places').innerHTML = '';
   const av = $('avatars');
   av.innerHTML = '';
-  const seats = seatsOf(place.kind);
+  const seats = seatsOf(place.kind, `${city.id}/${place.id}`);
   const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id && u.place === place.id);
   const { seat, standing } = assignSeats(here, seats.length);
   seats.forEach((s, i) => {

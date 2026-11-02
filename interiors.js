@@ -189,15 +189,80 @@ const SCENES = {
   },
 };
 
-// 座位列表（扁平）· flat seat list for a kind
-export function seatsOf(kind) {
-  const sc = SCENES[kind] || SCENES.library;
+/* ---------- 专属场景 place-specific scenes (key: city/place) ---------- */
+// 林雪平市立图书馆：北欧风，落地玻璃墙正对林雪平大教堂，桦木地板，白色书架，长桌吊灯，扶手椅阅读角
+// Linköping City Library: Scandinavian, glass wall facing Linköping Cathedral, birch floor,
+// white shelves, a long shared table under pendant lamps, and an armchair reading corner.
+const BIRCH = '#E9D3AE';
+const SPECIAL = {
+  'linkoping/lib': {
+    seats: [
+      { y: 330, seats: [220, 360, 500, 640, 780] },
+      { y: 480, seats: [200, 340, 660, 800] },
+      { y: 612, seats: [250, 400, 600, 750] },
+    ],
+    art(name) {
+      let s = R(0, 0, 1000, 640, '#F4F1EA');
+      // 落地玻璃墙 + 窗外：天空、树、大教堂 · glass wall with sky, trees and the cathedral
+      s += R(0, 0, 1000, 250, '#CFE6F2') + R(0, 196, 1000, 54, '#A8D08D');
+      s += trees([[150, 170, 0.9], [300, 180, 0.7], [470, 176, 0.8], [900, 172, 0.9]], '#7FB069', '#7A5A3A');
+      // 大教堂：石砌教堂 + 铜绿尖塔 · cathedral: stone nave and a tall copper-green spire
+      s += R(560, 140, 300, 70, '#D8CFC0') + R(552, 126, 316, 16, '#5E8F7A') + [585, 625, 785, 825].map((x) => R(x, 154, 14, 34, '#A9B7C6') + R(x + 3, 150, 8, 4, '#A9B7C6')).join('');
+      s += R(675, 70, 70, 140, '#D8CFC0') + R(696, 92, 28, 40, '#A9B7C6') + R(700, 160, 20, 50, '#8C6A44');
+      s += R(670, 58, 80, 14, '#5E8F7A') + R(680, 40, 60, 18, '#5E8F7A') + R(690, 22, 40, 18, '#5E8F7A') + R(698, 6, 24, 16, '#5E8F7A') + R(705, -6, 10, 12, '#5E8F7A') + R(708, -14, 4, 8, '#D9A93B');
+      for (let x = 0; x <= 1000; x += 125) s += R(x - 4, 0, 8, 250, '#FFFFFF');
+      s += R(0, 120, 1000, 6, '#FFFFFF') + R(0, 244, 1000, 10, '#FFFFFF');
+      // 桦木地板 · birch floor
+      s += R(0, 254, 1000, 386, '#E6D2B0');
+      for (let y = 284; y < 640; y += 30) s += R(0, y, 1000, 2, '#D6BE96');
+      // 两侧白色书架 · white shelves on both sides
+      const cols = ['#1F6F8B', '#D9A93B', '#C94F3D', '#2E7D5B', '#6B4FA0', '#E8B48C', '#3B5BA9'];
+      [[0, 96], [904, 96]].forEach(([x0, w]) => {
+        s += R(x0, 254, w, 386, '#FFFFFF') + R(x0 + (x0 ? 0 : w - 6), 254, 6, 386, '#DDD8CE');
+        let k = x0;
+        for (let y = 274; y + 40 < 640; y += 56) {
+          for (let x = x0 + 10; x < x0 + w - 14; x += 11, k++) if (k % 5) s += R(x, y + 40 - (28 + (k * 7) % 12), 9, 28 + (k * 7) % 12, cols[k % cols.length]);
+          s += R(x0, y + 40, w, 6, '#DDD8CE');
+        }
+      });
+      // 吊灯 · pendant lamps over the long table
+      [290, 430, 570, 710].forEach((x) => { s += R(x - 1, 0, 2, 214, '#3C4A5C') + R(x - 22, 214, 44, 18, '#2B2F36') + R(x - 16, 232, 32, 4, '#F6E7A8'); });
+      // 第一排：长桌，五个座位，彩色北欧椅 · row 1: long shared table, five seats, coloured chairs
+      const chairCols = ['#D9A93B', '#1F6F8B', '#C9705A', '#2E7D5B', '#D9A93B'];
+      [220, 360, 500, 640, 780].forEach((x, i) => { s += R(x - 20, 288, 40, 46, chairCols[i]) + R(x - 23, 282, 46, 8, '#FFFFFF33'); });
+      s += R(180, 360, 10, 40, '#FFFFFF') + R(810, 360, 10, 40, '#FFFFFF') + R(160, 330, 680, 22, BIRCH) + R(160, 352, 680, 8, '#C9A97A');
+      [290, 430, 570, 710].forEach((x, i) => { s += i % 2 ? R(x - 16, 332, 30, 6, '#C94F3D') + R(x - 12, 326, 26, 6, '#1F6F8B') : R(x - 18, 334, 14, 12, '#FFFFFF') + R(x + 2, 334, 18, 12, '#9CCBDB'); });
+      // 第二排：两张小桌 + 中间大盆栽 · row 2: two tables with a big plant between
+      [[270, [200, 340]], [730, [660, 800]]].forEach(([cx, seats]) => {
+        seats.forEach((x, i) => { s += R(x - 20, 438, 40, 46, i ? '#1F6F8B' : '#C9705A') + R(x - 23, 432, 46, 8, '#FFFFFF33'); });
+        s += R(cx - 135, 510, 10, 36, '#FFFFFF') + R(cx + 125, 510, 10, 36, '#FFFFFF') + R(cx - 150, 480, 300, 22, BIRCH) + R(cx - 150, 502, 300, 8, '#C9A97A');
+        s += R(cx - 12, 466, 4, 20, '#3C4A5C') + R(cx - 24, 458, 28, 10, '#2B2F36') + R(cx + 6, 482, 26, 8, '#F4F1EA');
+      });
+      s += R(474, 480, 52, 54, '#FFFFFF') + R(478, 484, 44, 4, '#DDD8CE') + R(452, 430, 96, 52, '#5E8F4A') + R(466, 412, 68, 22, '#6FA85A') + R(488, 404, 26, 12, '#7FB069');
+      // 第三排：地毯 + 扶手椅阅读角 · row 3: rug and armchair reading corner
+      s += R(170, 560, 660, 80, '#D9C4A0') + R(180, 570, 640, 70, '#E8B48C');
+      [250, 400, 600, 750].forEach((x, i) => {
+        const c = ['#3E6B5A', '#C9705A', '#1F6F8B', '#3E6B5A'][i];
+        s += R(x - 32, 560, 64, 56, c) + R(x - 40, 588, 14, 44, c) + R(x + 26, 588, 14, 44, c) + R(x - 40, 612, 80, 24, c) + R(x - 34, 614, 68, 6, '#FFFFFF33');
+      });
+      [325, 675].forEach((x) => { s += R(x - 22, 600, 44, 10, BIRCH) + R(x - 3, 610, 6, 30, '#C9A97A') + R(x - 12, 590, 14, 10, '#FFFFFF') + R(x + 4, 594, 12, 6, '#C94F3D'); });
+      // 达拉木马 · a Dala horse on the shelf end
+      s += R(930, 228, 22, 14, '#C94F3D') + R(948, 218, 8, 12, '#C94F3D') + R(932, 242, 4, 8, '#C94F3D') + R(946, 242, 4, 8, '#C94F3D') + R(936, 232, 10, 3, '#D9A93B');
+      return s + sign(name, 14, '#1F2A24', '#FFFFFF');
+    },
+  },
+};
+const sceneFor = (kind, key) => SPECIAL[key] || SCENES[kind] || SCENES.library;
+
+// 座位列表（扁平）· flat seat list; key = "city/place" picks a place-specific scene if there is one
+export function seatsOf(kind, key) {
+  const sc = sceneFor(kind, key);
   const out = [];
   sc.seats.forEach((t) => t.seats.forEach((x) => out.push({ x, y: t.y })));
   return out;
 }
 
-export function interiorSVG(kind, name) {
-  const sc = SCENES[kind] || SCENES.library;
+export function interiorSVG(kind, name, key) {
+  const sc = sceneFor(kind, key);
   return `<g ${P}>${sc.art(name)}</g>`;
 }
