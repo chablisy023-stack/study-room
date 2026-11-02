@@ -6,6 +6,7 @@ An online study room where everyone studies together on a little **town map**.
 ## 功能 Features
 - 🌍 世界地图：林雪平、北京、伦敦、巴黎、东京、首尔、纽约、悉尼 8 座城市
 - 🏘️ 每座城是一个小镇，有 4 个特色地点，都是真实地点（如林雪平：林雪平市立图书馆、Kårallen 学生会馆、罗克森湖、Campus US 医学院）
+- 🪑 地点内部：点地点走进去，坐到具体座位上（图书馆长桌台灯、咖啡馆小圆桌、实验室显微镜台、海边遮阳伞……10 种室内/户外场景）；点空座位就能换座，满座时显示还有几人在找座位
 - 🔓 解锁：专注 1 分钟 = 1 金币；用金币购买，或在上一座城累计专注满时长「通关」（30 金币 / 1 小时起）
 - 🧍 像素小人：自选肤色、发色、发型、衣服
 - 🔊 背景音：每个地点不同（雨声、咖啡馆、水声、风声、仪器声），浏览器实时合成
@@ -37,6 +38,7 @@ python3 -m http.server 8000
 
 ## 文件 Files
 - `index.html` 页面结构 · `style.css` 样式 · `app.js` 交互逻辑
+- `cities.js` 城市、地点与小镇美术 · `interiors.js` 地点内部场景和座位 · `avatar.js` 像素小人
 - `i18n.js` 中英文案和地点 · `backend.js` 数据层（演示 / Firebase）
 - `firebase-config.js` Firebase 配置 · `database.rules.json` 数据库安全规则
 

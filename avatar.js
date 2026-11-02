@@ -12,7 +12,8 @@ export function randomAvatar(seed) {
   return { skin: h % SKINS.length, hair: (h >> 3) % HAIRS.length, style: (h >> 6) % STYLES.length, shirt: (h >> 9) % SHIRTS.length };
 }
 
-export function spriteSVG(a = DEFAULT_AVATAR) {
+// seated: 只画腰部以上（坐在桌子后面）· waist-up only, for sitting behind a desk
+export function spriteSVG(a = DEFAULT_AVATAR, seated = false) {
   const skin = SKINS[a.skin] || SKINS[0];
   const hair = HAIRS[a.hair] || HAIRS[0];
   const shirt = SHIRTS[a.shirt] || SHIRTS[0];
@@ -22,7 +23,7 @@ export function spriteSVG(a = DEFAULT_AVATAR) {
   if (style === 'long') back = r(2, 2, 8, 9, hair);
   if (style === 'bun') top = r(4, 0, 4, 2, hair);
   if (style === 'short') top = r(2, 3, 1, 2, hair) + r(9, 3, 1, 2, hair);
-  return `<svg viewBox="0 0 12 18" shape-rendering="crispEdges" aria-hidden="true">
+  return `<svg viewBox="0 0 12 ${seated ? 13 : 18}" shape-rendering="crispEdges" aria-hidden="true">
     ${back}
     ${r(3, 2, 6, 6, skin)}
     ${r(2, 1, 8, 2, hair)}${r(3, 3, 6, 1, hair)}${top}

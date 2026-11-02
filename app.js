@@ -1,6 +1,7 @@
 import { STR } from './i18n.js';
 import { createBackend, dayKey } from './backend.js';
 import { CITIES, SLOTS, SOUND_OF, cityById, worldSVG, townSVG } from './cities.js';
+import { interiorSVG, seatsOf } from './interiors.js';
 import { SKINS, HAIRS, STYLES, SHIRTS, DEFAULT_AVATAR, spriteSVG } from './avatar.js';
 import { playAmbient, stopAmbient, setVolume } from './sound.js';
 
@@ -188,20 +189,95 @@ function renderPomo() {
   $('pomo-clock').textContent = `${String(Math.floor(p.left / 60)).padStart(2, '0')}:${String(p.left % 60).padStart(2, '0')}`;
 }
 
+// 三层：世界地图 → 城市 → 地点内部 · three levels: world → city → inside a place
 function renderMap() {
   const t = T();
-  const world = state.view === 'world';
+  const view = state.view;
+  const world = view === 'world';
   const map = $('map');
   map.classList.toggle('world', world);
+  map.classList.toggle('room', view === 'room');
   const svg = $('map-svg');
   svg.setAttribute('viewBox', world ? '0 0 1000 560' : '0 0 1000 640');
-  svg.innerHTML = world ? worldSVG() : townSVG(curCity());
-  $('world-btn').hidden = world;
-  $('world-btn').textContent = `← ${t.world}`;
-  $('map-title').textContent = world ? t.world : L(curCity());
-  $('map-hint').textContent = world ? t.worldHint : t.townHint;
-  if (world) renderWorld(); else renderTown();
+  svg.innerHTML = world ? worldSVG() : view === 'room' ? interiorSVG(curPlace().kind, L(curPlace())) : townSVG(curCity());
+  const back = $('world-btn');
+  back.hidden = world;
+  back.dataset.action = view === 'room' ? 'town' : 'world';
+  back.textContent = `← ${view === 'room' ? L(curCity()) : t.world}`;
+  $('map-title').textContent = world ? t.world : view === 'room' ? L(curPlace()) : L(curCity());
+  $('map-hint').textContent = world ? t.worldHint : view === 'room' ? t.roomHint : t.townHint;
+  renderView();
 }
+function renderView() {
+  if (state.view === 'world') renderWorld();
+  else if (state.view === 'room') renderRoom();
+  else renderTown();
+}
+
+/* ---------------- 地点内部：座位 · inside a place: seats ---------------- */
+const seatPref = (id, n) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % n; };
+
+// 选了座位的人先坐；其他人从各自偏好的位置往后找空位 · chosen seats first, then everyone else from a stable preferred seat
+function assignSeats(users, n) {
+  const seat = new Array(n).fill(null);
+  const rest = [];
+  const sorted = [...users].sort((a, b) => (isMeUser(b) - isMeUser(a)) || String(a.id).localeCompare(String(b.id)));
+  sorted.forEach((u) => {
+    const s = u.seat;
+    if (Number.isInteger(s) && s >= 0 && s < n && !seat[s]) seat[s] = u; else rest.push(u);
+  });
+  const standing = [];
+  rest.forEach((u) => {
+    const start = seatPref(u.id, n);
+    let k = 0;
+    while (k < n && seat[(start + k) % n]) k++;
+    if (k < n) seat[(start + k) % n] = u; else standing.push(u);
+  });
+  return { seat, standing };
+}
+
+function renderRoom() {
+  const t = T();
+  const city = curCity();
+  const place = curPlace();
+  $('places').innerHTML = '';
+  const av = $('avatars');
+  av.innerHTML = '';
+  const seats = seatsOf(place.kind);
+  const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id && u.place === place.id);
+  const { seat, standing } = assignSeats(here, seats.length);
+  seats.forEach((s, i) => {
+    const left = `${s.x / 10}%`;
+    const top = `${s.y / 6.4}%`;
+    const u = seat[i];
+    if (u) {
+      const a = makeAvatar(u, true);
+      a.style.left = left;
+      a.style.top = top;
+      av.appendChild(a);
+    } else {
+      const b = el('button', 'seat-btn', '+');
+      b.type = 'button';
+      b.style.left = left;
+      b.style.top = top;
+      b.setAttribute('aria-label', t.sitHere(i + 1));
+      b.title = t.sitHere(i + 1);
+      b.addEventListener('click', () => sit(i));
+      av.appendChild(b);
+    }
+  });
+  // 座位满了：人数写在提示行里，不盖住座位 · room full: say so in the hint line instead of covering seats
+  $('map-hint').textContent = t.roomHint + (standing.length ? ` · ${t.standing(standing.length)}` : '');
+}
+
+function sit(i) {
+  state.profile.seat = i;
+  saveProfile();
+  backend.update({ seat: i });
+  toast(T().seated(i + 1));
+  renderRoom();
+}
+
 
 function cityCounts() {
   const c = {};
@@ -257,6 +333,7 @@ function renderPicker() {
       if (c.id !== state.profile.city) {
         state.profile.city = c.id;
         state.profile.place = c.places[0].id;
+        state.profile.seat = null;
         saveProfile();
       }
       renderPicker();
@@ -276,16 +353,36 @@ function renderPicker() {
     const b = el('button', 'sw txt', `${L(p)} · ${n}`);
     b.type = 'button';
     b.setAttribute('aria-pressed', p.id === state.profile.place ? 'true' : 'false');
-    b.addEventListener('click', () => { state.profile.place = p.id; saveProfile(); renderPicker(); });
+    b.addEventListener('click', () => {
+      if (p.id !== state.profile.place) state.profile.seat = null;
+      state.profile.place = p.id;
+      saveProfile();
+      renderPicker();
+    });
     pb.appendChild(b);
   });
   $('pick-where').textContent = t.pickWhere(L(city), L(curPlace()));
 }
 const t_locked = () => T().locked;
 
+const isMeUser = (u) => (u.uid || u.id) === backend.uid;
+
+// 一个小人（名牌 + 悬停提示）· one character with name tag and hover tip
+function makeAvatar(u, seated = false) {
+  const t = T();
+  const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMeUser(u) ? ' me' : ''}${seated ? ' seated' : ''}`);
+  a.tabIndex = 0;
+  a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR, seated);
+  const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
+  a.setAttribute('aria-label', label);
+  a.appendChild(el('span', 'nm', u.name));
+  a.appendChild(el('span', 'tip', label));
+  if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
+  return a;
+}
+
 function renderTown() {
   const city = curCity();
-  const t = T();
   const box = $('places');
   box.innerHTML = '';
   const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
@@ -336,17 +433,9 @@ function renderTown() {
         left = `${Math.max(3, Math.min(97, x / 10))}%`;
         top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
       }
-      const isMe = (u.uid || u.id) === backend.uid;
-      const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMe ? ' me' : ''}`);
-      a.tabIndex = 0;
+      const a = makeAvatar(u);
       a.style.left = left;
       a.style.top = top;
-      a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR);
-      const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
-      a.setAttribute('aria-label', label);
-      a.appendChild(el('span', 'nm', u.name));
-      a.appendChild(el('span', 'tip', label));
-      if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
       av.appendChild(a);
     });
     if (mobile && spots.hidden > 0) {
@@ -416,10 +505,10 @@ function mobileSpots(idx, users) {
 let lastMapW = 0;
 window.addEventListener('resize', () => {
   const w = $('map').clientWidth;
-  if (!state.inTown || state.view !== 'town' || w === lastMapW) return;
+  if (!state.inTown || state.view === 'world' || w === lastMapW) return;
   lastMapW = w;
   clearTimeout(window.__townResize);
-  window.__townResize = setTimeout(renderTown, 150);
+  window.__townResize = setTimeout(renderView, 150);
 });
 
 function renderUnlock() {
@@ -506,13 +595,13 @@ async function enterTown(e) {
   if (!curCity().places.some((p) => p.id === state.profile.place)) state.profile.place = curCity().places[0].id;
   saveProfile();
   state.inTown = true;
-  state.view = 'town';
+  state.view = 'room';
   state.sessionSecs = 0;
   state.pendingSecs = 0;
   state.status = state.profile.pomo && !pomoNow().focus ? 'break' : 'focus';
   state.pomoPhase = pomoNow().focus;
   const p = state.profile;
-  await backend.join({ name, subject, city: p.city, place: p.place, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
+  await backend.join({ name, subject, city: p.city, place: p.place, seat: Number.isInteger(p.seat) ? p.seat : null, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
   $('join').hidden = true;
   $('town').hidden = false;
   window.scrollTo(0, 0);
@@ -546,18 +635,23 @@ function setStatus(s) {
   state.status = s;
   backend.update({ status: s });
   renderSession();
-  if (state.view === 'town') renderTown();
+  if (state.view !== 'world') renderView();
 }
 
+// 走进一个地点（换地点时座位清空）· walk into a place (seat resets when the place changes)
 function moveTo(placeId) {
-  if (placeId === state.profile.place) return;
-  state.profile.place = placeId;
-  saveProfile();
-  backend.update({ place: placeId });
-  toast(T().moved(L(curPlace())));
-  renderSession();
-  renderTown();
-  syncSound();
+  if (placeId !== state.profile.place) {
+    state.profile.place = placeId;
+    state.profile.seat = null;
+    saveProfile();
+    backend.update({ place: placeId, seat: null });
+    toast(T().moved(L(curPlace())));
+    renderSession();
+    syncSound();
+  }
+  state.view = 'room';
+  renderMap();
+  window.requestAnimationFrame(() => $('map').scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
 }
 
 function goCity(cityId) {
@@ -566,8 +660,9 @@ function goCity(cityId) {
   if (cityId !== state.profile.city) {
     state.profile.city = cityId;
     state.profile.place = c.places[0].id;
+    state.profile.seat = null;
     saveProfile();
-    backend.update({ city: cityId, place: state.profile.place });
+    backend.update({ city: cityId, place: state.profile.place, seat: null });
     toast(T().moved(L(c)));
   }
   state.view = 'town';
@@ -633,6 +728,7 @@ document.addEventListener('click', (e) => {
   else if (a === 'tab-today') { state.tab = 'today'; renderBoard(); }
   else if (a === 'tab-week') { state.tab = 'week'; renderBoard(); }
   else if (a === 'world') { state.view = 'world'; renderMap(); renderUnlock(); }
+  else if (a === 'town') { state.view = 'town'; renderMap(); }
   else if (a === 'sound') { state.sound = !state.sound; lsSet('st-sound', state.sound); syncSound(); }
   else if (a === 'close-unlock') { state.unlockTarget = null; renderUnlock(); }
   else if (a === 'buy' && state.unlockTarget) unlock(state.unlockTarget, true);
@@ -691,7 +787,7 @@ window.addEventListener('pagehide', () => {
   backend.onPresence((list) => {
     state.presence = list;
     renderOnline();
-    if (state.inTown) { if (state.view === 'world') renderWorld(); else renderTown(); }
+    if (state.inTown) renderView();
     else renderPicker();
   });
   backend.onMessages((msgs) => { state.messages = msgs; if (state.inTown) renderMessages(); });
