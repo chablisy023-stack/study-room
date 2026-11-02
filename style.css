@@ -218,11 +218,27 @@ h2 { font-size: 18px; }
 }
 
 @media (max-width: 560px) {
-  .avatar svg { width: 22px; height: 33px; }
-  .avatar.me svg { width: 26px; height: 39px; }
-  .avatar .nm { font-size: 9px; max-width: 54px; }
+  /* 手机：小精灵、不显示名牌（点按看提示），自己用橙色描边 · phones: compact sprites, names via tooltip */
+  .avatar { width: 16px; }
+  .avatar svg, .avatar.me svg { width: 16px; height: 24px; }
+  .avatar.me svg {
+    filter: drop-shadow(1px 0 0 var(--warm)) drop-shadow(-1px 0 0 var(--warm))
+            drop-shadow(0 1px 0 var(--warm)) drop-shadow(0 -1px 0 var(--warm));
+  }
+  .avatar .nm { display: none; }
+  .avatar .zz { top: -4px; right: -8px; font-size: 8px; line-height: 1.2; padding: 0 2px; border-radius: 4px; }
+  .avatar .tip { font-size: 11px; padding: 4px 8px; }
+  .avatar-more {
+    position: absolute; transform: translate(-50%, -100%); height: 18px; min-width: 18px; max-width: 36px; padding: 0 4px;
+    border-radius: 9px; background: rgba(31,42,36,0.82); color: #fff; font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; margin-top: -3px; pointer-events: none;
+  }
+  /* 地名在建筑上方 · place label sits above the building */
+  .place-btn {
+    transform: translate(-50%, -100%); font-size: 10px; min-height: 24px; padding: 1px 7px; border-width: 1.5px;
+    max-width: 46%; overflow: hidden; text-overflow: ellipsis;
+  }
   .city-pin .lbl { font-size: 10px; padding: 1px 6px; }
   .city-pin .pin { width: 16px; height: 16px; border-width: 2px; }
-  .place-btn { font-size: 11px; min-height: 30px; padding: 2px 8px; }
   .layout { padding: 12px; }
 }

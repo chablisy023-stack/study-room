@@ -239,11 +239,13 @@ function renderTown() {
   const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
   const counts = {};
   here.forEach((u) => { counts[u.place] = (counts[u.place] || 0) + 1; });
+  const mobile = isMobile();
   city.places.forEach((p, i) => {
     const b = el('button', 'place-btn' + (p.id === state.profile.place ? ' here' : ''), `${L(p)} · ${counts[p.id] || 0}`);
     b.type = 'button';
     b.style.left = `${SLOTS[i].x / 10}%`;
-    b.style.top = `${(SLOTS[i].y + 50) / 6.4}%`;
+    // 手机上地名放在建筑上方，给人物留出下方空间 · on phones the label sits above the building
+    b.style.top = `${(SLOTS[i].y + (mobile ? -72 : 50)) / 6.4}%`;
     b.addEventListener('click', () => moveTo(p.id));
     box.appendChild(b);
   });
@@ -257,17 +259,27 @@ function renderTown() {
     if (idx < 0) continue;
     const s = SLOTS[idx];
     users.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const spots = mobile ? mobileSpots(idx, users) : null;
     users.forEach((u, i) => {
-      // 站在建筑前面一排排开 · line up in front of the building
-      const row = Math.floor(i / 5);
-      const col = i % 5;
-      const x = s.x + (col - 2) * 46 + (row % 2) * 23;
-      const y = s.y + 165 + row * 30;
+      let left;
+      let top;
+      if (mobile) {
+        if (i >= spots.shown) return;
+        [left, top] = spots.pos(i);
+      } else {
+        // 站在建筑前面一排排开 · line up in front of the building
+        const row = Math.floor(i / 5);
+        const col = i % 5;
+        const x = s.x + (col - 2) * 46 + (row % 2) * 23;
+        const y = s.y + 165 + row * 30;
+        left = `${Math.max(3, Math.min(97, x / 10))}%`;
+        top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
+      }
       const isMe = (u.uid || u.id) === backend.uid;
       const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMe ? ' me' : ''}`);
       a.tabIndex = 0;
-      a.style.left = `${Math.max(3, Math.min(97, x / 10))}%`;
-      a.style.top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
+      a.style.left = left;
+      a.style.top = top;
       a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR);
       const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
       a.setAttribute('aria-label', label);
@@ -276,8 +288,78 @@ function renderTown() {
       if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
       av.appendChild(a);
     });
+    if (mobile && spots.hidden > 0) {
+      const more = el('div', 'avatar-more', `+${spots.hidden}`);
+      [more.style.left, more.style.top] = spots.morePos();
+      av.appendChild(more);
+    }
   }
 }
+
+// ---- 手机布局 · phone layout ----
+function isMobile() { return window.matchMedia('(max-width: 560px)').matches; }
+
+// 用真实的地名按钮位置算出人物可站的区域，保证不重叠
+// Work out, in pixels, where sprites can stand below a place without touching any place label.
+function mobileSpots(idx, users) {
+  const STEP_X = 19; // 精灵宽 16px + 间隔 · sprite width + gap (keep in sync with style.css)
+  const STEP_Y = 27; // 精灵高 24px + 间隔 · sprite height + gap
+  const MAX_ROWS = 2;
+  const map = $('map');
+  const W = map.clientWidth;
+  const H = map.clientHeight;
+  const mapTop = map.getBoundingClientRect().top;
+  const labels = [...$('places').children].map((b) => b.getBoundingClientRect());
+  const s = SLOTS[idx];
+  const own = labels[idx];
+  let limit = H - 2;
+  SLOTS.forEach((o, j) => {
+    if (j !== idx && o.y > s.y && Math.abs(o.x - s.x) < 300) limit = Math.min(limit, labels[j].top - mapTop - 3);
+  });
+  const ownBottom = own ? own.bottom - mapTop + 3 : 0;
+  const rows = Math.max(1, Math.min(MAX_ROWS, Math.floor((limit - ownBottom) / STEP_Y)));
+  const cx = (s.x / 1000) * W;
+  const half = Math.min(0.2 * W, cx - 2, W - cx - 2);
+  const perRow = Math.max(1, Math.floor((half * 2) / STEP_X));
+  const cap = rows * perRow;
+  // 人多时把自己排在最前 · when crowded, make sure "me" is among those shown
+  if (users.length > cap) {
+    const mi = users.findIndex((u) => (u.uid || u.id) === backend.uid);
+    if (mi > 0) users.unshift(...users.splice(mi, 1));
+  }
+  // 放不下时最后两格留给「+N」标签 · when crowded, the last two slots hold the "+N" chip
+  const reserve = perRow >= 2 ? 2 : 1;
+  const shown = users.length > cap ? cap - reserve : users.length;
+  const slots = Math.min(cap, users.length);
+  const px = (i) => {
+    const row = Math.floor(i / perRow);
+    const inRow = Math.min(perRow, slots - row * perRow);
+    const col = i % perRow;
+    const x = cx + (col - (inRow - 1) / 2) * STEP_X;
+    const y = limit - (rows - 1 - row) * STEP_Y; // 第 0 行在后 · row 0 at the back, last row at the front
+    return [x, y];
+  };
+  const pct = ([x, y]) => [`${(x / W) * 100}%`, `${(y / H) * 100}%`];
+  return {
+    shown,
+    hidden: users.length - shown,
+    pos: (i) => pct(px(i)),
+    morePos: () => {
+      const [x1, y] = px(shown);
+      const [x2] = px(shown + reserve - 1);
+      return pct([(x1 + x2) / 2, y]);
+    },
+  };
+}
+
+let lastMapW = 0;
+window.addEventListener('resize', () => {
+  const w = $('map').clientWidth;
+  if (!state.inTown || state.view !== 'town' || w === lastMapW) return;
+  lastMapW = w;
+  clearTimeout(window.__townResize);
+  window.__townResize = setTimeout(renderTown, 150);
+});
 
 function renderUnlock() {
   const box = $('unlock');
