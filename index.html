@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>自习小镇 Study Town</title>
-<meta name="description" content="线上自习室：在小镇地图上和大家一起学习 · An online study town to focus together">
+<meta name="description" content="线上自习世界：在地图上和大家一起学习，攒金币解锁新城市 · Study together on a world map">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -32,9 +32,18 @@
       <label class="field"><span data-i18n="subj"></span>
         <input id="f-subj" maxlength="30" required data-i18n-ph="subjPh">
       </label>
-      <label class="field"><span data-i18n="place"></span>
-        <select id="f-place"></select>
-      </label>
+      <fieldset class="builder">
+        <legend data-i18n="look"></legend>
+        <div class="builder-row">
+          <div class="preview" id="avatar-preview"></div>
+          <div class="builder-opts">
+            <div class="opt-group"><span class="small muted" data-i18n="skin"></span><div class="swatches" id="sw-skin"></div></div>
+            <div class="opt-group"><span class="small muted" data-i18n="hair"></span><div class="swatches" id="sw-hair"></div></div>
+            <div class="opt-group"><span class="small muted" data-i18n="style"></span><div class="swatches" id="sw-style"></div></div>
+            <div class="opt-group"><span class="small muted" data-i18n="shirt"></span><div class="swatches" id="sw-shirt"></div></div>
+          </div>
+        </div>
+      </fieldset>
       <label class="check"><input type="checkbox" id="f-pomo"><span data-i18n="pomoOpt"></span></label>
       <button type="submit" class="btn primary big" data-i18n="enter"></button>
       <p class="muted small" data-i18n="note"></p>
@@ -42,7 +51,7 @@
   </div>
 </section>
 
-<!-- ============ 主界面 Town ============ -->
+<!-- ============ 主界面 Main ============ -->
 <section id="town" class="screen" hidden>
   <header class="topbar">
     <div class="brand">
@@ -52,6 +61,7 @@
       <span id="mode-tag" class="tag"></span>
     </div>
     <div class="top-actions">
+      <span class="coin-pill" id="coin-pill"><span class="coin" aria-hidden="true"></span><span id="coin-count">0</span></span>
       <button type="button" class="btn ghost" id="pomo-toggle" data-action="pomo" aria-pressed="false"></button>
       <button type="button" class="btn ghost lang-btn" data-action="lang"></button>
       <button type="button" class="btn ghost" data-action="leave" data-i18n="leave"></button>
@@ -84,31 +94,38 @@
 
       <div class="map-card card">
         <div class="map-head">
-          <h2 data-i18n="mapTitle"></h2>
-          <span class="muted small" data-i18n="mapHint"></span>
+          <div class="crumbs">
+            <button type="button" class="btn ghost small-btn" data-action="world" id="world-btn"></button>
+            <h2 id="map-title"></h2>
+          </div>
+          <div class="sound-ctl">
+            <button type="button" class="btn ghost small-btn" data-action="sound" id="sound-btn" aria-pressed="false"></button>
+            <label class="vol"><span class="sr" data-i18n="volume"></span><input type="range" id="vol" min="0" max="100" value="50"></label>
+          </div>
         </div>
+        <p class="muted small map-hint" id="map-hint"></p>
         <div class="map" id="map">
-          <svg viewBox="0 0 1000 640" class="map-svg" role="img" data-i18n-aria="mapAria">
-            <rect width="1000" height="640" fill="#BFD9A8"/>
-            <path d="M0 560 C 200 520, 380 600, 560 560 S 900 520, 1000 540 V640 H0Z" fill="#9CCBDB"/>
-            <path d="M600 640 C 660 590, 760 560, 1000 560 V640Z" fill="#F1E2B6"/>
-            <path d="M120 200 C 300 230, 420 300, 500 330 S 700 260, 820 200" stroke="#E8D7AE" stroke-width="34" fill="none" stroke-linecap="round"/>
-            <path d="M500 330 C 480 400, 320 430, 230 470" stroke="#E8D7AE" stroke-width="34" fill="none" stroke-linecap="round"/>
-            <path d="M500 330 C 580 400, 700 450, 800 490" stroke="#E8D7AE" stroke-width="34" fill="none" stroke-linecap="round"/>
-            <g fill="#8DBF73"><circle cx="70" cy="90" r="26"/><circle cx="110" cy="70" r="20"/><circle cx="930" cy="80" r="28"/><circle cx="890" cy="330" r="22"/><circle cx="60" cy="380" r="24"/><circle cx="380" cy="80" r="18"/><circle cx="640" cy="90" r="20"/></g>
-            <!-- library -->
-            <g transform="translate(220 170)"><rect x="-80" y="-40" width="160" height="80" rx="6" fill="#C98B5E"/><path d="M-92 -40 L0 -92 L92 -40Z" fill="#8C4F33"/><g fill="#F6E7C8"><rect x="-62" y="-22" width="16" height="44"/><rect x="-30" y="-22" width="16" height="44"/><rect x="14" y="-22" width="16" height="44"/><rect x="46" y="-22" width="16" height="44"/></g></g>
-            <!-- cafe -->
-            <g transform="translate(770 160)"><rect x="-70" y="-38" width="140" height="76" rx="8" fill="#F3C9A1"/><path d="M-80 -38 h160 l-12 -24 h-136z" fill="#D9694B"/><path d="M-80 -38 h20 v10 h-20z M-40 -38 h20 v10 h-20z M0 -38 h20 v10 h-20z M40 -38 h20 v10 h-20z" fill="#FBF2E6"/><rect x="-16" y="0" width="32" height="38" fill="#8C4F33"/><rect x="-56" y="-14" width="28" height="22" fill="#FBF2E6"/><rect x="28" y="-14" width="28" height="22" fill="#FBF2E6"/></g>
-            <!-- park -->
-            <g transform="translate(500 330)"><circle r="62" fill="#A8D08D"/><circle r="22" fill="#9CCBDB"/><circle cx="-38" cy="-30" r="16" fill="#6FA85A"/><circle cx="40" cy="28" r="14" fill="#6FA85A"/><circle cx="34" cy="-36" r="10" fill="#F2B6C6"/></g>
-            <!-- lab -->
-            <g transform="translate(230 470)"><rect x="-72" y="-44" width="144" height="88" rx="6" fill="#DCE6EE"/><rect x="-72" y="-56" width="144" height="16" fill="#7E97AD"/><g fill="#9CCBDB"><rect x="-56" y="-26" width="24" height="18"/><rect x="-12" y="-26" width="24" height="18"/><rect x="32" y="-26" width="24" height="18"/></g><rect x="-14" y="8" width="28" height="36" fill="#7E97AD"/></g>
-            <!-- seaside -->
-            <g transform="translate(800 500)"><path d="M-40 10 L0 -60 L40 10Z" fill="#F07F6A"/><rect x="-3" y="-60" width="6" height="80" fill="#8C4F33"/><rect x="-60" y="14" width="120" height="14" rx="7" fill="#C98B5E"/></g>
-          </svg>
+          <svg viewBox="0 0 1000 640" class="map-svg" id="map-svg" role="img" data-i18n-aria="mapAria"></svg>
           <div class="places" id="places"></div>
           <div class="avatars" id="avatars"></div>
+        </div>
+        <div class="unlock card" id="unlock" hidden>
+          <div class="row-between">
+            <strong id="unlock-title"></strong>
+            <button type="button" class="btn ghost small-btn" data-action="close-unlock" data-i18n="close"></button>
+          </div>
+          <div class="unlock-body">
+            <div class="unlock-opt">
+              <button type="button" class="btn primary" data-action="buy" id="buy-btn"></button>
+              <span class="small muted" id="buy-note"></span>
+            </div>
+            <div class="unlock-opt">
+              <span class="small" id="quest-text"></span>
+              <div class="bar"><span id="quest-bar"></span></div>
+              <span class="small muted" id="quest-progress"></span>
+              <button type="button" class="btn ghost" data-action="quest" id="quest-btn" data-i18n="unlockFree"></button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

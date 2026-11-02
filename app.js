@@ -1,5 +1,8 @@
-import { STR, PLACES } from './i18n.js';
+import { STR } from './i18n.js';
 import { createBackend, dayKey } from './backend.js';
+import { CITIES, SLOTS, SOUND_OF, cityById, worldSVG, townSVG } from './cities.js';
+import { SKINS, HAIRS, STYLES, SHIRTS, DEFAULT_AVATAR, spriteSVG } from './avatar.js';
+import { playAmbient, stopAmbient, setVolume } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const lsGet = (k, f) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : f; } catch { return f; } };
@@ -8,12 +11,22 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 const CHECKIN_SECS = 25 * 60;
 const CHAT_COOLDOWN = 30;
 const BAD_WORDS = ['傻逼', '操你', '草泥马', 'fuck', 'shit', 'bitch'];
-const COLORS = ['#2E7D5B', '#3B5BA9', '#8A4FB0', '#9A5B12', '#A23E5A', '#1F6F8B', '#5B6B1E', '#7A3E2E'];
+const LOCK_SVG = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="5" width="8" height="6" rx="1" fill="#fff"/><path d="M4 5V3.5a2 2 0 0 1 4 0V5" stroke="#fff" stroke-width="1.4" fill="none"/></svg>';
 
+const savedProfile = lsGet('st-profile', {});
 const state = {
   lang: lsGet('st-lang', (navigator.language || '').startsWith('zh') ? 'zh' : 'en'),
-  profile: lsGet('st-profile', { name: '', subject: '', place: 'library', pomo: false }),
+  profile: {
+    name: '', subject: '', city: 'linkoping', place: 'lib', pomo: false,
+    ...savedProfile,
+    avatar: { ...DEFAULT_AVATAR, ...(savedProfile.avatar || {}) },
+  },
+  coins: lsGet('st-coins', 0),
+  unlocked: lsGet('st-unlocked', ['linkoping']),
+  cityFocus: lsGet('st-cityfocus', {}),
+  coinAcc: 0,
   inTown: false,
+  view: 'town',
   status: 'focus',
   sessionSecs: 0,
   pendingSecs: 0,
@@ -22,25 +35,24 @@ const state = {
   tab: 'today',
   lastSent: 0,
   pomoPhase: null,
+  sound: lsGet('st-sound', false),
+  vol: lsGet('st-vol', 50),
+  unlockTarget: null,
 };
+if (!state.unlocked.includes(state.profile.city)) state.profile.city = 'linkoping';
 let backend = null;
 const T = () => STR[state.lang];
-const placeName = (id) => (PLACES.find((p) => p.id === id) || PLACES[0])[state.lang];
+const L = (o) => o[state.lang];
+const curCity = () => cityById(state.profile.city);
+const curPlace = () => curCity().places.find((p) => p.id === state.profile.place) || curCity().places[0];
+const saveProfile = () => lsSet('st-profile', state.profile);
 
 /* ---------------- helpers ---------------- */
 function fmtHMS(s) {
   const p = (n) => String(n).padStart(2, '0');
   return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}`;
 }
-function fmtHours(s) {
-  if (s < 3600) return `${Math.round(s / 60)}m`;
-  return `${(s / 3600).toFixed(1)}h`;
-}
-function colorFor(id) {
-  let h = 0;
-  for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return COLORS[h % COLORS.length];
-}
+const fmtHours = (s) => (s < 3600 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`);
 function clean(text) {
   let t = text.trim().slice(0, 200);
   for (const w of BAD_WORDS) t = t.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '*'.repeat(w.length));
@@ -59,15 +71,11 @@ function pomoNow(now = Date.now()) {
   const focus = t < F;
   return { focus, left: Math.ceil(((focus ? F : P) - t) / 1000), round: (Math.floor(now / P) % 48) + 1 };
 }
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 
-/* ---------------- daily record (check-in & streak) ---------------- */
-function myDay() { return lsGet('st-days', {}); }
-function addMyDay(secs) {
-  const d = myDay();
-  const k = dayKey();
-  d[k] = (d[k] || 0) + secs;
-  lsSet('st-days', d);
-}
+/* ---------------- daily record ---------------- */
+const myDay = () => lsGet('st-days', {});
+function addMyDay(secs) { const d = myDay(); const k = dayKey(); d[k] = (d[k] || 0) + secs; lsSet('st-days', d); }
 function streak() {
   const d = myDay();
   let n = 0;
@@ -76,21 +84,58 @@ function streak() {
   return n;
 }
 
+/* ---------------- sound ---------------- */
+function syncSound() {
+  const b = $('sound-btn');
+  const t = T();
+  const kind = SOUND_OF[curPlace().kind];
+  b.textContent = state.sound ? `${t.soundOn} · ${t.soundNames[kind]}` : t.soundOff;
+  b.setAttribute('aria-pressed', state.sound ? 'true' : 'false');
+  $('vol').value = state.vol;
+  if (state.inTown && state.sound) playAmbient(kind, state.vol / 100);
+  else stopAmbient();
+}
+
+/* ---------------- avatar builder ---------------- */
+function renderBuilder() {
+  const a = state.profile.avatar;
+  $('avatar-preview').innerHTML = spriteSVG(a);
+  const groups = [['sw-skin', 'skin', SKINS], ['sw-hair', 'hair', HAIRS], ['sw-shirt', 'shirt', SHIRTS]];
+  for (const [id, key, list] of groups) {
+    const box = $(id);
+    box.innerHTML = '';
+    list.forEach((c, i) => {
+      const b = el('button', 'sw');
+      b.type = 'button';
+      b.style.background = c;
+      b.setAttribute('aria-label', `${T()[key]} ${i + 1}`);
+      b.setAttribute('aria-pressed', a[key] === i ? 'true' : 'false');
+      b.addEventListener('click', () => { a[key] = i; saveProfile(); renderBuilder(); });
+      box.appendChild(b);
+    });
+  }
+  const sb = $('sw-style');
+  sb.innerHTML = '';
+  STYLES.forEach((s, i) => {
+    const b = el('button', 'sw txt', T().styleNames[i]);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', a.style === i ? 'true' : 'false');
+    b.addEventListener('click', () => { a.style = i; saveProfile(); renderBuilder(); });
+    sb.appendChild(b);
+  });
+}
+
 /* ---------------- i18n ---------------- */
 function applyLang() {
   const t = T();
   document.documentElement.lang = state.lang === 'zh' ? 'zh' : 'en';
   document.title = state.lang === 'zh' ? '自习小镇 Study Town' : 'Study Town 自习小镇';
-  document.querySelectorAll('[data-i18n]').forEach((el) => { const v = t[el.dataset.i18n]; if (typeof v === 'string') el.textContent = v; });
-  document.querySelectorAll('[data-i18n-ph]').forEach((el) => { el.placeholder = t[el.dataset.i18nPh]; });
-  document.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t[el.dataset.i18nAria]); });
+  document.querySelectorAll('[data-i18n]').forEach((e) => { const v = t[e.dataset.i18n]; if (typeof v === 'string') e.textContent = v; });
+  document.querySelectorAll('[data-i18n-ph]').forEach((e) => { e.placeholder = t[e.dataset.i18nPh]; });
+  document.querySelectorAll('[data-i18n-aria]').forEach((e) => { e.setAttribute('aria-label', t[e.dataset.i18nAria]); });
   document.querySelectorAll('.lang-btn').forEach((b) => { b.textContent = t.lang; b.setAttribute('aria-label', t.langAria); });
-  const sel = $('f-place');
-  const cur = sel.value || state.profile.place;
-  sel.innerHTML = '';
-  PLACES.forEach((p) => { const o = document.createElement('option'); o.value = p.id; o.textContent = p[state.lang]; sel.appendChild(o); });
-  sel.value = cur;
   $('mode-tag').textContent = backend && backend.mode === 'demo' ? t.demoTag : '';
+  renderBuilder();
   renderAll();
 }
 
@@ -99,12 +144,14 @@ function renderAll() {
   renderOnline();
   if (!state.inTown) return;
   renderSession();
+  renderCoins();
   renderPomo();
-  renderPlaces();
-  renderAvatars();
+  renderMap();
+  renderUnlock();
   renderMessages();
   renderCheckin();
   renderBoard();
+  syncSound();
 }
 
 function renderOnline() {
@@ -113,9 +160,15 @@ function renderOnline() {
   $('join-online').textContent = T().nowOnline(n);
 }
 
+function renderCoins(pop) {
+  $('coin-count').textContent = state.coins;
+  $('coin-pill').setAttribute('aria-label', T().coinsAria(state.coins));
+  if (pop) { const p = $('coin-pill'); p.classList.remove('pop'); void p.offsetWidth; p.classList.add('pop'); }
+}
+
 function renderSession() {
   const t = T();
-  $('s-where').textContent = t.at(placeName(state.profile.place));
+  $('s-where').textContent = t.at(L(curCity()), L(curPlace()));
   $('s-subject').textContent = state.profile.subject;
   $('s-timer').textContent = fmtHMS(state.sessionSecs);
   $('s-status').textContent = state.status === 'focus' ? t.focus : t.rest;
@@ -134,62 +187,119 @@ function renderPomo() {
   $('pomo-clock').textContent = `${String(Math.floor(p.left / 60)).padStart(2, '0')}:${String(p.left % 60).padStart(2, '0')}`;
 }
 
-function renderPlaces() {
+function renderMap() {
+  const t = T();
+  const world = state.view === 'world';
+  const map = $('map');
+  map.classList.toggle('world', world);
+  const svg = $('map-svg');
+  svg.setAttribute('viewBox', world ? '0 0 1000 560' : '0 0 1000 640');
+  svg.innerHTML = world ? worldSVG() : townSVG(curCity());
+  $('world-btn').hidden = world;
+  $('world-btn').textContent = `← ${t.world}`;
+  $('map-title').textContent = world ? t.world : L(curCity());
+  $('map-hint').textContent = world ? t.worldHint : t.townHint;
+  if (world) renderWorld(); else renderTown();
+}
+
+function cityCounts() {
+  const c = {};
+  state.presence.forEach((u) => { c[u.city || 'linkoping'] = (c[u.city || 'linkoping'] || 0) + 1; });
+  return c;
+}
+
+function renderWorld() {
   const box = $('places');
   box.innerHTML = '';
-  const counts = {};
-  state.presence.forEach((u) => { counts[u.place] = (counts[u.place] || 0) + 1; });
-  PLACES.forEach((p) => {
-    const b = document.createElement('button');
+  $('avatars').innerHTML = '';
+  const counts = cityCounts();
+  CITIES.forEach((c) => {
+    const unlocked = state.unlocked.includes(c.id);
+    const b = el('button', 'city-pin' + (unlocked ? '' : ' locked') + (c.id === state.profile.city ? ' here' : ''));
     b.type = 'button';
-    b.className = 'place-btn' + (p.id === state.profile.place ? ' here' : '');
-    b.style.left = `${p.x / 10}%`;
-    b.style.top = `${(p.y + 58) / 6.4}%`;
-    b.textContent = `${p[state.lang]} · ${counts[p.id] || 0}`;
-    b.addEventListener('click', () => moveTo(p.id));
+    b.classList.add(`lbl-${c.lbl || 'bottom'}`);
+    b.style.left = `${c.wx / 10}%`;
+    b.style.top = `${c.wy / 5.6}%`;
+    const pin = el('span', 'pin');
+    if (!unlocked) pin.innerHTML = LOCK_SVG;
+    const lbl = el('span', 'lbl', unlocked ? `${L(c)} · ${counts[c.id] || 0}` : `${L(c)} · ${t_locked()}`);
+    b.append(pin, lbl);
+    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${counts[c.id] || 0} ${T().online}` : `${L(c)}, ${T().locked}`);
+    b.addEventListener('click', () => (unlocked ? goCity(c.id) : openUnlock(c.id)));
     box.appendChild(b);
   });
 }
+const t_locked = () => T().locked;
 
-function renderAvatars() {
-  const box = $('avatars');
-  box.innerHTML = '';
+function renderTown() {
+  const city = curCity();
   const t = T();
+  const box = $('places');
+  box.innerHTML = '';
+  const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
+  const counts = {};
+  here.forEach((u) => { counts[u.place] = (counts[u.place] || 0) + 1; });
+  city.places.forEach((p, i) => {
+    const b = el('button', 'place-btn' + (p.id === state.profile.place ? ' here' : ''), `${L(p)} · ${counts[p.id] || 0}`);
+    b.type = 'button';
+    b.style.left = `${SLOTS[i].x / 10}%`;
+    b.style.top = `${(SLOTS[i].y + 50) / 6.4}%`;
+    b.addEventListener('click', () => moveTo(p.id));
+    box.appendChild(b);
+  });
+
+  const av = $('avatars');
+  av.innerHTML = '';
   const byPlace = {};
-  state.presence.forEach((u) => { (byPlace[u.place] = byPlace[u.place] || []).push(u); });
-  for (const [placeId, users] of Object.entries(byPlace)) {
-    const p = PLACES.find((x) => x.id === placeId);
-    if (!p) continue;
+  here.forEach((u) => { (byPlace[u.place] = byPlace[u.place] || []).push(u); });
+  for (const [pid, users] of Object.entries(byPlace)) {
+    const idx = city.places.findIndex((p) => p.id === pid);
+    if (idx < 0) continue;
+    const s = SLOTS[idx];
     users.sort((a, b) => String(a.id).localeCompare(String(b.id)));
     users.forEach((u, i) => {
-      const ring = Math.floor(i / 8);
-      const ang = (i % 8) / 8 * Math.PI * 2 - Math.PI / 2 + ring * 0.4;
-      const r = 80 + ring * 36;
-      const x = p.x + Math.cos(ang) * r * 1.35;
-      const y = p.y + Math.sin(ang) * r * 0.75;
+      // 站在建筑前面一排排开 · line up in front of the building
+      const row = Math.floor(i / 5);
+      const col = i % 5;
+      const x = s.x + (col - 2) * 46 + (row % 2) * 23;
+      const y = s.y + 165 + row * 30;
       const isMe = (u.uid || u.id) === backend.uid;
-      const el = document.createElement('div');
-      el.className = 'avatar' + (isMe ? ' me' : '') + (u.status === 'break' ? ' rest' : '');
-      el.tabIndex = 0;
-      el.style.left = `${Math.max(3, Math.min(97, x / 10))}%`;
-      el.style.top = `${Math.max(5, Math.min(95, y / 6.4))}%`;
-      el.style.background = colorFor(u.uid || u.id);
-      el.textContent = (u.name || '?').charAt(0).toUpperCase();
+      const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMe ? ' me' : ''}`);
+      a.tabIndex = 0;
+      a.style.left = `${Math.max(3, Math.min(97, x / 10))}%`;
+      a.style.top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
+      a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR);
       const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
-      el.setAttribute('aria-label', label);
-      const tip = document.createElement('span');
-      tip.className = 'tip';
-      tip.textContent = label;
-      el.appendChild(tip);
-      if (u.status === 'break') {
-        const z = document.createElement('span');
-        z.className = 'zz';
-        z.textContent = 'zz';
-        el.appendChild(z);
-      }
-      box.appendChild(el);
+      a.setAttribute('aria-label', label);
+      a.appendChild(el('span', 'nm', u.name));
+      a.appendChild(el('span', 'tip', label));
+      if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
+      av.appendChild(a);
     });
   }
+}
+
+function renderUnlock() {
+  const box = $('unlock');
+  const id = state.unlockTarget;
+  if (!id || state.view !== 'world') { box.hidden = true; return; }
+  const t = T();
+  const i = CITIES.findIndex((c) => c.id === id);
+  const c = CITIES[i];
+  const prev = CITIES[i - 1];
+  box.hidden = false;
+  $('unlock-title').textContent = t.unlockTitle(L(c));
+  const prevOk = state.unlocked.includes(prev.id);
+  const buy = $('buy-btn');
+  buy.textContent = t.unlockCoins(c.cost);
+  buy.disabled = !prevOk || state.coins < c.cost;
+  $('buy-note').textContent = !prevOk ? t.needPrev(L(prev)) : (state.coins < c.cost ? t.notEnough(c.cost - state.coins) : '');
+  const need = Math.round(c.hours * 60);
+  const done = Math.min(need, Math.floor((state.cityFocus[prev.id] || 0) / 60));
+  $('quest-text').textContent = t.unlockQuest(L(prev), c.hours);
+  $('quest-bar').style.width = `${(done / need) * 100}%`;
+  $('quest-progress').textContent = t.questProgress(done, need);
+  $('quest-btn').disabled = !prevOk || done < need;
 }
 
 function renderMessages() {
@@ -197,22 +307,17 @@ function renderMessages() {
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   box.innerHTML = '';
   state.messages.forEach((m) => {
-    const wrap = document.createElement('div');
-    const head = document.createElement('div');
-    head.className = 'msg-head';
-    const n = document.createElement('strong');
-    n.textContent = m.name + (m.bot ? ` (${T().demoBadge})` : '');
-    const tm = document.createElement('time');
+    const wrap = el('div');
+    const head = el('div', 'msg-head');
     const d = new Date(typeof m.ts === 'number' ? m.ts : Date.now());
-    tm.textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-    head.append(n, tm);
-    const tx = document.createElement('div');
-    tx.className = 'msg-text';
-    tx.textContent = m.text;
-    wrap.append(head, tx);
+    head.append(
+      el('strong', '', m.name + (m.bot ? ` (${T().demoBadge})` : '')),
+      el('time', '', `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`),
+    );
+    wrap.append(head, el('div', 'msg-text', m.text));
     box.appendChild(wrap);
   });
-  if (atBottom || renderMessages.first !== false) { box.scrollTop = box.scrollHeight; renderMessages.first = false; }
+  if (atBottom || !renderMessages.done) { box.scrollTop = box.scrollHeight; renderMessages.done = true; }
 }
 
 function renderCheckin() {
@@ -235,22 +340,15 @@ async function renderBoard() {
   if (tab !== state.tab) return;
   const ol = $('board');
   ol.innerHTML = '';
-  if (!rows.length) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = t.empty;
-    ol.appendChild(li);
-    return;
-  }
+  if (!rows.length) { ol.appendChild(el('li', 'empty', t.empty)); return; }
   rows.forEach((r, i) => {
-    const li = document.createElement('li');
     const me = r.id === backend.uid;
-    if (me) li.className = 'me';
-    const rank = document.createElement('span'); rank.className = 'rank'; rank.textContent = i + 1;
-    const name = document.createElement('span'); name.className = 'name';
-    name.textContent = r.name + (me ? t.me : '') + (r.bot ? ` (${t.demoBadge})` : '');
-    const h = document.createElement('span'); h.className = 'mono'; h.textContent = fmtHours(r.secs);
-    li.append(rank, name, h);
+    const li = el('li', me ? 'me' : '');
+    li.append(
+      el('span', 'rank', String(i + 1)),
+      el('span', 'name', r.name + (me ? t.me : '') + (r.bot ? ` (${t.demoBadge})` : '')),
+      el('span', 'mono', fmtHours(r.secs)),
+    );
     ol.appendChild(li);
   });
 }
@@ -261,14 +359,17 @@ async function enterTown(e) {
   const name = $('f-nick').value.trim().slice(0, 16);
   const subject = $('f-subj').value.trim().slice(0, 30);
   if (!name || !subject) return;
-  state.profile = { name, subject, place: $('f-place').value, pomo: $('f-pomo').checked };
-  lsSet('st-profile', state.profile);
+  Object.assign(state.profile, { name, subject, pomo: $('f-pomo').checked });
+  if (!curCity().places.some((p) => p.id === state.profile.place)) state.profile.place = curCity().places[0].id;
+  saveProfile();
   state.inTown = true;
+  state.view = 'town';
   state.sessionSecs = 0;
   state.pendingSecs = 0;
   state.status = state.profile.pomo && !pomoNow().focus ? 'break' : 'focus';
   state.pomoPhase = pomoNow().focus;
-  await backend.join({ name, subject, place: state.profile.place, status: state.status, focusSecs: 0, startedAt: Date.now() });
+  const p = state.profile;
+  await backend.join({ name, subject, city: p.city, place: p.place, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
   $('join').hidden = true;
   $('town').hidden = false;
   window.scrollTo(0, 0);
@@ -280,6 +381,7 @@ async function flush() {
     const s = state.pendingSecs;
     state.pendingSecs = 0;
     addMyDay(s);
+    lsSet('st-cityfocus', state.cityFocus);
     try { await backend.addStudy(s, state.profile.name); } catch (e) { console.warn(e); }
   }
 }
@@ -288,6 +390,7 @@ async function endSession(silent) {
   await flush();
   const mins = Math.floor(state.sessionSecs / 60);
   state.inTown = false;
+  stopAmbient();
   await backend.leave();
   $('town').hidden = true;
   $('join').hidden = false;
@@ -299,15 +402,58 @@ function setStatus(s) {
   state.status = s;
   backend.update({ status: s });
   renderSession();
+  if (state.view === 'town') renderTown();
 }
 
 function moveTo(placeId) {
   if (placeId === state.profile.place) return;
   state.profile.place = placeId;
-  lsSet('st-profile', state.profile);
+  saveProfile();
   backend.update({ place: placeId });
-  toast(T().moved(placeName(placeId)));
-  renderAll();
+  toast(T().moved(L(curPlace())));
+  renderSession();
+  renderTown();
+  syncSound();
+}
+
+function goCity(cityId) {
+  const c = cityById(cityId);
+  state.unlockTarget = null;
+  if (cityId !== state.profile.city) {
+    state.profile.city = cityId;
+    state.profile.place = c.places[0].id;
+    saveProfile();
+    backend.update({ city: cityId, place: state.profile.place });
+    toast(T().moved(L(c)));
+  }
+  state.view = 'town';
+  renderSession();
+  renderMap();
+  renderUnlock();
+  syncSound();
+}
+
+function openUnlock(cityId) {
+  state.unlockTarget = cityId;
+  renderUnlock();
+  $('unlock').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function unlock(cityId, viaCoins) {
+  const c = cityById(cityId);
+  if (state.unlocked.includes(cityId)) return;
+  if (viaCoins) {
+    if (state.coins < c.cost) return;
+    state.coins -= c.cost;
+    lsSet('st-coins', state.coins);
+    renderCoins(true);
+  }
+  state.unlocked = [...state.unlocked, cityId];
+  lsSet('st-unlocked', state.unlocked);
+  toast(T().unlocked(L(c)));
+  state.unlockTarget = null;
+  renderMap();
+  renderUnlock();
 }
 
 async function sendChat(e) {
@@ -326,12 +472,12 @@ async function sendChat(e) {
 
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action]');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
   const a = btn.dataset.action;
   if (a === 'lang') { state.lang = state.lang === 'zh' ? 'en' : 'zh'; lsSet('st-lang', state.lang); applyLang(); }
   else if (a === 'pomo') {
     state.profile.pomo = !state.profile.pomo;
-    lsSet('st-profile', state.profile);
+    saveProfile();
     state.pomoPhase = pomoNow().focus;
     renderSession(); renderPomo();
   }
@@ -339,12 +485,30 @@ document.addEventListener('click', (e) => {
   else if (a === 'pause') setStatus(state.status === 'focus' ? 'break' : 'focus');
   else if (a === 'tab-today') { state.tab = 'today'; renderBoard(); }
   else if (a === 'tab-week') { state.tab = 'week'; renderBoard(); }
+  else if (a === 'world') { state.view = 'world'; renderMap(); renderUnlock(); }
+  else if (a === 'sound') { state.sound = !state.sound; lsSet('st-sound', state.sound); syncSound(); }
+  else if (a === 'close-unlock') { state.unlockTarget = null; renderUnlock(); }
+  else if (a === 'buy' && state.unlockTarget) unlock(state.unlockTarget, true);
+  else if (a === 'quest' && state.unlockTarget) unlock(state.unlockTarget, false);
 });
+$('vol').addEventListener('input', (e) => { state.vol = Number(e.target.value); lsSet('st-vol', state.vol); setVolume(state.vol / 100); });
 
 /* ---------------- clock ---------------- */
 setInterval(() => {
   if (!state.inTown) return;
-  if (state.status === 'focus') { state.sessionSecs++; state.pendingSecs++; }
+  if (state.status === 'focus') {
+    state.sessionSecs++;
+    state.pendingSecs++;
+    state.cityFocus[state.profile.city] = (state.cityFocus[state.profile.city] || 0) + 1;
+    state.coinAcc++;
+    if (state.coinAcc >= 60) {
+      state.coinAcc = 0;
+      state.coins++;
+      lsSet('st-coins', state.coins);
+      renderCoins(true);
+      if (state.unlockTarget) renderUnlock();
+    }
+  }
   if (state.profile.pomo) {
     const p = pomoNow();
     if (p.focus !== state.pomoPhase) {
@@ -356,12 +520,19 @@ setInterval(() => {
   }
   $('s-timer').textContent = fmtHMS(state.sessionSecs);
   if (state.pendingSecs >= 30) {
-    flush().then(() => { renderCheckin(); });
+    flush().then(() => { renderCheckin(); if (state.unlockTarget) renderUnlock(); });
     backend.update({ focusSecs: state.sessionSecs });
   }
 }, 1000);
 setInterval(() => { if (state.inTown) renderBoard(); }, 60000);
-window.addEventListener('pagehide', () => { if (state.inTown) { addMyDay(state.pendingSecs); backend.addStudy(state.pendingSecs, state.profile.name); state.pendingSecs = 0; } });
+window.addEventListener('pagehide', () => {
+  if (state.inTown && state.pendingSecs) {
+    addMyDay(state.pendingSecs);
+    lsSet('st-cityfocus', state.cityFocus);
+    backend.addStudy(state.pendingSecs, state.profile.name);
+    state.pendingSecs = 0;
+  }
+});
 
 /* ---------------- boot ---------------- */
 (async function boot() {
@@ -370,11 +541,10 @@ window.addEventListener('pagehide', () => { if (state.inTown) { addMyDay(state.p
   $('f-subj').value = state.profile.subject || '';
   $('f-pomo').checked = !!state.profile.pomo;
   applyLang();
-  $('f-place').value = state.profile.place || 'library';
   backend.onPresence((list) => {
     state.presence = list;
     renderOnline();
-    if (state.inTown) { renderPlaces(); renderAvatars(); }
+    if (state.inTown) { if (state.view === 'world') renderWorld(); else renderTown(); }
   });
   backend.onMessages((msgs) => { state.messages = msgs; if (state.inTown) renderMessages(); });
   $('join-form').addEventListener('submit', enterTown);

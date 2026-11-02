@@ -2,6 +2,8 @@
 // - live 模式：填好 firebase-config.js 后，用 Firebase Realtime Database 实现真正的多人在线
 // - demo 模式：没有配置时自动启用；同一浏览器多个标签页之间互通，并有几位"演示同学"
 import { firebaseConfig } from './firebase-config.js';
+import { cityById } from './cities.js';
+import { randomAvatar } from './avatar.js';
 
 export function dayKey(offset = 0) {
   const d = new Date();
@@ -99,14 +101,15 @@ async function createLive(cfg) {
 /* demo: local only                                                    */
 /* ------------------------------------------------------------------ */
 const BOTS = [
-  { id: 'bot-lin', name: '小林', subject: '考研英语 · Grad English', place: 'library', base: 5.2 },
-  { id: 'bot-erik', name: 'Erik', subject: 'Statistics · 统计学', place: 'cafe', base: 3.1 },
-  { id: 'bot-mei', name: 'Mei', subject: '免疫学笔记 · Immunology', place: 'lab', base: 2.6 },
-  { id: 'bot-zhe', name: '阿哲', subject: '论文写作 · Thesis', place: 'library', base: 4.4 },
-  { id: 'bot-sara', name: 'Sara', subject: 'Svenska · 瑞典语', place: 'seaside', base: 1.8 },
-  { id: 'bot-qing', name: '晴天', subject: 'Python 入门 · Intro Python', place: 'park', base: 2.2 },
+  { id: 'bot-lin', name: '小林', subject: '考研英语 · Grad English', city: 'beijing', place: 'lib', base: 5.2 },
+  { id: 'bot-erik', name: 'Erik', subject: 'Statistics · 统计学', city: 'london', place: 'cafe', base: 3.1 },
+  { id: 'bot-mei', name: 'Mei', subject: '免疫学笔记 · Immunology', city: 'linkoping', place: 'lab', base: 2.6 },
+  { id: 'bot-zhe', name: '阿哲', subject: '论文写作 · Thesis', city: 'beijing', place: 'tea', base: 4.4 },
+  { id: 'bot-sara', name: 'Sara', subject: 'Svenska · 瑞典语', city: 'linkoping', place: 'fika', base: 1.8 },
+  { id: 'bot-qing', name: '晴天', subject: 'Python 入门 · Intro Python', city: 'tokyo', place: 'cat', base: 2.2 },
+  { id: 'bot-minji', name: 'Min-ji', subject: 'TOPIK · 韩语', city: 'seoul', place: 'cafe', base: 3.6 },
+  { id: 'bot-liv', name: 'Olivia', subject: 'Marine biology · 海洋生物', city: 'sydney', place: 'bondi', base: 1.4 },
 ];
-const PLACE_IDS = ['library', 'cafe', 'park', 'lab', 'seaside'];
 
 function createDemo() {
   let uid = lsGet('st-uid', null);
@@ -124,7 +127,7 @@ function createDemo() {
 
   const start = Date.now();
   const bots = BOTS.map((b, i) => ({
-    ...b, bot: true, status: 'focus', focusSecs: Math.round(b.base * 600) + i * 97, startedAt: start,
+    ...b, bot: true, status: 'focus', focusSecs: Math.round(b.base * 600) + i * 97, startedAt: start, avatar: randomAvatar(b.id),
   }));
 
   function presenceList() {
@@ -150,7 +153,10 @@ function createDemo() {
     bots.forEach((b) => {
       if (b.status === 'focus') b.focusSecs += 5;
       if (Math.random() < 0.04) b.status = b.status === 'focus' ? 'break' : 'focus';
-      if (Math.random() < 0.02) b.place = PLACE_IDS[Math.floor(Math.random() * PLACE_IDS.length)];
+      if (Math.random() < 0.02) {
+        const ps = cityById(b.city).places;
+        b.place = ps[Math.floor(Math.random() * ps.length)].id;
+      }
     });
     if (me && ch) ch.postMessage({ type: 'presence', id: tabId, p: { uid, ...me } });
     emitPresence();
