@@ -255,7 +255,7 @@ h2 { font-size: 18px; }
   /* 地名在建筑上方 · place label sits above the building */
   .place-btn {
     transform: translate(-50%, -100%); font-size: 10px; min-height: 24px; padding: 1px 7px; border-width: 1.5px;
-    max-width: 46%; overflow: hidden; text-overflow: ellipsis;
+    max-width: calc(50% - 6px); overflow: hidden; text-overflow: ellipsis;
   }
   .city-pin .lbl { font-size: 10px; padding: 1px 6px; }
   .city-pin .pin { width: 16px; height: 16px; border-width: 2px; }
@@ -268,4 +268,7 @@ h2 { font-size: 18px; }
   .map.mini .city-pin.lbl-bottom { transform: translate(-50%, -7px); }
   .map.mini .city-pin.lbl-top { transform: translate(-50%, calc(-100% + 7px)); }
   .map.mini .city-pin.lbl-left { transform: translate(calc(-100% + 7px), -50%); }
+}
+@media (max-width: 380px) {
+  .place-btn { font-size: 9px; padding: 1px 5px; }
 }

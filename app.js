@@ -301,6 +301,15 @@ function renderTown() {
     b.addEventListener('click', () => moveTo(p.id));
     box.appendChild(b);
   });
+  if (mobile) {
+    // 地名太长时往地图里收，不出边界 · keep long place labels inside the map
+    const m = $('map').getBoundingClientRect();
+    [...box.children].forEach((b, i) => {
+      const r = b.getBoundingClientRect();
+      const shift = Math.max(0, m.left + 2 - r.left) - Math.max(0, r.right - (m.right - 2));
+      if (shift) b.style.left = `calc(${SLOTS[i].x / 10}% + ${shift}px)`;
+    });
+  }
 
   const av = $('avatars');
   av.innerHTML = '';
