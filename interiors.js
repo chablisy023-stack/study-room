@@ -13,39 +13,87 @@ function sign(text, y = 14, bg = '#5E3523', fg = '#FBF2E6') {
     <text x="500" y="${y + 30}" text-anchor="middle" font-size="24" font-weight="700" fill="${fg}" font-family="'Noto Sans SC', system-ui, sans-serif">${esc(text)}</text>`;
 }
 
-/* ---------- 座位布局 seat layouts ---------- */
-// 长桌：每排两张，每张 3 个座位 · long tables: two per row, three seats each
-function longTables(rows, seatGap = 120) {
-  const tables = [];
-  rows.forEach((y) => [260, 740].forEach((cx) => tables.push({ cx, y, w: 380, seats: [-seatGap, 0, seatGap].map((d) => cx + d) })));
-  return tables;
-}
-// 小桌：每排三张，每张 2 个座位 · small tables: three per row, two seats each
-function smallTables(rows) {
-  const tables = [];
-  rows.forEach((y) => [190, 500, 810].forEach((cx) => tables.push({ cx, y, w: 200, seats: [cx - 50, cx + 50] })));
-  return tables;
-}
-
-// 画桌子和椅子 · draw tables + chairs; deco(x, y) puts things on the desk between seats
-function drawTables(tables, st) {
-  let back = '';
-  let front = '';
-  tables.forEach((t) => {
-    t.seats.forEach((sx) => { back += st.chair(sx, t.y); });
-    const x0 = t.cx - t.w / 2;
-    front += R(x0 + 14, t.y + 30, 10, st.legH || 40, st.leg) + R(x0 + t.w - 24, t.y + 30, 10, st.legH || 40, st.leg);
-    front += R(x0, t.y, t.w, 22, st.top) + R(x0, t.y + 22, t.w, 10, st.apron);
-    if (st.deco) {
-      const gaps = [];
-      for (let i = 0; i < t.seats.length - 1; i++) gaps.push((t.seats[i] + t.seats[i + 1]) / 2);
-      gaps.forEach((gx) => { front += st.deco(gx, t.y); });
-    }
-  });
-  return back + front;
-}
+/* ---------- 家具：每件返回 {svg, seats} · furniture: each piece returns its art and its seats ---------- */
+// pose: 'seat' = 坐在桌子/椅子后面（只露上半身）· waist-up behind a desk
+//       'ground' = 盘腿坐在地上/草地上 · cross-legged on the floor or grass
+const seat = (x, y, pose = 'seat') => ({ x, y, pose });
 const chairOf = (c, top) => (x, y) => R(x - 20, y - 46, 40, 50, c) + R(x - 23, y - 52, 46, 9, top);
-const stoolOf = (c) => (x, y) => R(x - 16, y - 10, 32, 12, c);
+const stoolOf = (c) => (x, y) => R(x - 16, y - 10, 32, 12, c) + R(x - 3, y + 2, 6, 40, c);
+const between = (xs) => xs.slice(1).map((x, i) => (x + xs[i]) / 2);
+
+// 长桌 + 椅子 · long table with chairs
+function longTable(xs, y, st) {
+  const x0 = xs[0] - 60;
+  const w = xs[xs.length - 1] - xs[0] + 120;
+  let svg = xs.map((x) => st.chair(x, y)).join('');
+  svg += R(x0 + 14, y + 30, 10, st.legH || 40, st.leg) + R(x0 + w - 24, y + 30, 10, st.legH || 40, st.leg);
+  svg += R(x0, y, w, 22, st.top) + R(x0, y + 22, w, 10, st.apron);
+  if (st.deco) svg += between(xs).map((gx) => st.deco(gx, y)).join('');
+  return { svg, seats: xs.map((x) => seat(x, y)) };
+}
+// 圆桌，两人 · round table for two (single pedestal)
+function roundTable(cx, y, st) {
+  const xs = [cx - 48, cx + 48];
+  let svg = xs.map((x) => st.chair(x, y)).join('');
+  svg += R(cx - 6, y + 26, 12, 34, st.leg) + R(cx - 26, y + 58, 52, 6, st.leg);
+  svg += R(cx - 62, y + 2, 124, 20, st.top) + R(cx - 72, y + 6, 144, 12, st.top) + R(cx - 62, y + 22, 124, 6, st.apron);
+  if (st.deco) svg += st.deco(cx, y);
+  return { svg, seats: xs.map((x) => seat(x, y)) };
+}
+// 卡座：沙发靠背 + 桌子 · booth: sofa back behind, table in front
+function booth(xs, y, c, st) {
+  const x0 = xs[0] - 66;
+  const w = xs[xs.length - 1] - xs[0] + 132;
+  let svg = R(x0, y - 62, w, 66, c) + R(x0 - 10, y - 30, 14, 34, c) + R(x0 + w - 4, y - 30, 14, 34, c) + R(x0 + 6, y - 56, w - 12, 6, '#FFFFFF22');
+  return { svg: svg + longTable(xs, y, { ...st, chair: () => '' }).svg, seats: xs.map((x) => seat(x, y)) };
+}
+// 吧台 + 高脚凳 · bar counter with stools
+function barCounter(xs, y, st) {
+  const x0 = xs[0] - 70;
+  const w = xs[xs.length - 1] - xs[0] + 140;
+  let svg = xs.map((x) => R(x - 16, y - 10, 32, 12, st.stool)).join('');
+  svg += R(x0, y, w, 18, st.top) + R(x0 + 6, y + 18, w - 12, 50, st.front) + R(x0 + 6, y + 30, w - 12, 4, '#00000022');
+  if (st.deco) svg += between(xs).map((gx) => st.deco(gx, y)).join('');
+  return { svg, seats: xs.map((x) => seat(x, y)) };
+}
+// 双人沙发 · two-seat sofa
+function sofa(cx, y, c) {
+  const svg = R(cx - 96, y - 56, 192, 60, c) + R(cx - 108, y - 26, 20, 56, c) + R(cx + 88, y - 26, 20, 56, c) + R(cx - 96, y, 192, 28, c)
+    + R(cx - 90, y + 2, 86, 6, '#FFFFFF33') + R(cx + 4, y + 2, 86, 6, '#FFFFFF33') + R(cx - 100, y + 28, 10, 8, '#3C4A5C') + R(cx + 90, y + 28, 10, 8, '#3C4A5C');
+  return { svg, seats: [seat(cx - 48, y), seat(cx + 48, y)] };
+}
+// 公园长椅 · park bench
+function bench(cx, y, c = '#B07A4A', leg = '#3C4A5C') {
+  let svg = R(cx - 100, y - 50, 200, 10, c) + R(cx - 100, y - 34, 200, 10, c) + R(cx - 94, y - 50, 8, 60, leg) + R(cx + 86, y - 50, 8, 60, leg);
+  svg += R(cx - 104, y, 208, 14, c) + R(cx - 94, y + 14, 8, 26, leg) + R(cx + 86, y + 14, 8, 26, leg);
+  return { svg, seats: [seat(cx - 48, y), seat(cx + 48, y)] };
+}
+// 矮桌 + 坐垫（坐地上）· low table with floor cushions (sit on the floor)
+function lowTable(cx, y, st) {
+  const xs = [cx - 52, cx + 52];
+  let svg = xs.map((x) => R(x - 30, y - 10, 60, 22, st.cushion) + R(x - 26, y - 8, 52, 4, '#FFFFFF33')).join('');
+  svg += R(cx - 26, y - 22, 52, 10, st.top) + R(cx - 22, y - 12, 6, 16, st.leg) + R(cx + 16, y - 12, 6, 16, st.leg);
+  if (st.deco) svg += st.deco(cx, y - 30);
+  return { svg, seats: xs.map((x) => seat(x, y, 'ground')) };
+}
+// 野餐垫（坐草地上）· picnic blanket on the grass
+function blanket(cx, y, c = '#C94F3D') {
+  let svg = R(cx - 104, y - 22, 208, 44, '#FBF2E6');
+  for (let x = cx - 104, k = 0; x < cx + 104; x += 26, k++) svg += R(x, y - 22 + (k % 2) * 22, 26, 22, c);
+  svg += R(cx - 14, y - 30, 28, 22, '#B07A4A') + R(cx - 10, y - 38, 20, 6, '#8C4F33') + R(cx - 8, y - 2, 16, 10, '#3B5BA9');
+  return { svg, seats: [seat(cx - 52, y, 'ground'), seat(cx + 52, y, 'ground')] };
+}
+// 沙滩巾（坐沙滩上）· beach towels on the sand
+function towels(cx, y, c1 = '#3B7FC4', c2 = '#F07F6A') {
+  let svg = '';
+  [[cx - 52, c1], [cx + 52, c2]].forEach(([x, c]) => { svg += R(x - 34, y - 26, 68, 50, c); for (let i = 0; i < 3; i++) svg += R(x - 34, y - 18 + i * 16, 68, 5, '#FFFFFF66'); });
+  svg += R(cx - 10, y - 4, 20, 16, '#E3A72F') + R(cx - 6, y - 10, 12, 6, '#E3A72F');
+  return { svg, seats: [seat(cx - 52, y, 'ground'), seat(cx + 52, y, 'ground')] };
+}
+// 遮阳伞（画在后面）· beach umbrella (background)
+const umbrella = (cx, y, c = '#F07F6A') => R(cx - 3, y - 150, 6, 150, '#8C4F33') + R(cx - 96, y - 160, 192, 16, c) + R(cx - 70, y - 174, 140, 16, c) + R(cx - 30, y - 174, 30, 30, '#FBF2E6');
+// 草地块 · a patch of grass
+const lawn = (x, y, w, h) => R(x, y, w, h, '#A8D08D') + R(x + 8, y + 8, w - 16, h - 16, '#9CC783') + [0.15, 0.45, 0.8].map((f) => R(x + w * f, y + h * 0.3, 6, 10, '#7FB069')).join('');
 
 /* ---------- 桌面小物 desk deco ---------- */
 const lamp = (x, y) => R(x - 9, y + 12, 18, 5, '#8C6A44') + R(x - 2, y - 8, 4, 22, '#8C6A44') + R(x - 16, y - 20, 32, 13, '#2E7D5B') + R(x - 12, y - 8, 24, 3, '#F6E7A8');
@@ -95,97 +143,134 @@ function windowSky(x, y, w, h) {
   return s + R(x, y, w, 8, '#5E6B78') + R(x, y + h - 8, w, 8, '#5E6B78');
 }
 
+/* ---------- 桌椅样式 table styles ---------- */
+const LIB = { chair: chairOf('#6B3E1F', '#4A2A17'), top: '#8C4F33', apron: '#6B3E1F', leg: '#4A2A17', deco: lamp, legH: 30 };
+const CAFE = { chair: chairOf('#B45309', '#8F4207'), top: '#D9A97A', apron: '#A26F43', leg: '#5E3523', deco: cups };
+const TEA = { chair: chairOf('#5E3523', '#2B1D14'), top: '#7A3E2E', apron: '#5E2A1E', leg: '#2B1D14', deco: teapot, legH: 26 };
+const TEA_LOW = { cushion: '#C94F3D', top: '#7A3E2E', leg: '#2B1D14', deco: (x, y) => R(x - 10, y - 4, 20, 14, '#3E6B5A') + R(x - 4, y - 9, 8, 5, '#3E6B5A') };
+const SHOP_BAR = { stool: '#3C4A5C', top: '#F4F4F0', front: '#9AA7B4', deco: goods };
+const SHOP = { chair: stoolOf('#3C4A5C'), top: '#F4F4F0', apron: '#9AA7B4', leg: '#5E6B78', deco: goods };
+const LAB = { chair: stoolOf('#3C4A5C'), top: '#3C4A5C', apron: '#2B2F36', leg: '#7E97AD', deco: scope };
+const OFFICE = { chair: chairOf('#2B2F36', '#1F2A24'), top: '#E8E2D6', apron: '#9AA7B4', leg: '#5E6B78', deco: monitor };
+const STONE = { chair: stoolOf('#9AA7B4'), top: '#B9B2A4', apron: '#8C877C', leg: '#8C877C', deco: cups, legH: 30 };
+const PICNIC = { chair: chairOf('#B07A4A', '#8C4F33'), top: '#C98B5E', apron: '#8C4F33', leg: '#6B3E1F', deco: picnic };
+const DECK = { chair: chairOf('#8C4F33', '#6B3E1F'), top: '#E8D7AE', apron: '#B08A56', leg: '#6B3E1F', deco: cups };
+const BEACH = { chair: chairOf('#3B7FC4', '#2B5E94'), top: '#FBF2E6', apron: '#D9C4A0', leg: '#B07A4A', deco: shell };
+
+// 每种地点：背景 bg、家具 items（决定座位）、招牌 · per type: background, furniture (defines seats), sign
 const SCENES = {
   library: {
-    seats: longTables([280, 450, 610 - 20]),
-    art(name) {
-      return R(0, 0, 1000, 640, '#C98B5E') + shelves(0, 210) + planks(210, '#B98252', '#A26F43') + R(470, 210, 60, 430, '#A23E3E') + R(478, 210, 4, 430, '#C25B4A') + R(518, 210, 4, 430, '#C25B4A')
-        + drawTables(this.seats, { chair: chairOf('#6B3E1F', '#4A2A17'), top: '#8C4F33', apron: '#6B3E1F', leg: '#4A2A17', deco: lamp, legH: 30 })
-        + sign(name, 10);
-    },
+    bg: () => R(0, 0, 1000, 640, '#C98B5E') + shelves(0, 210) + planks(210, '#B98252', '#A26F43') + R(470, 210, 60, 430, '#A23E3E') + R(478, 210, 4, 430, '#C25B4A') + R(518, 210, 4, 430, '#C25B4A'),
+    items: () => [
+      longTable([140, 260, 380], 290, LIB), longTable([620, 740, 860], 290, LIB),
+      roundTable(220, 445, { ...LIB, deco: books }), roundTable(780, 445, { ...LIB, deco: books }),
+      sofa(290, 598, '#3E6B5A'), sofa(710, 598, '#A23E5A'),
+    ],
+    sign: (n) => sign(n, 10),
   },
   cafe: {
-    seats: smallTables([330, 520]),
-    art(name) {
+    bg() {
       let s = R(0, 0, 1000, 220, '#F3E3CC') + tiles(220, '#E9DCC8', '#D8C6AC');
       s += R(40, 110, 440, 110, '#8C4F33') + R(40, 100, 440, 14, '#5E3523') + R(90, 52, 80, 48, '#9AA7B4') + R(100, 62, 60, 20, '#5E6B78') + R(200, 74, 26, 26, '#FBF2E6') + R(236, 74, 26, 26, '#FBF2E6') + R(300, 60, 120, 40, '#F6E7C8');
       s += R(620, 70, 320, 120, '#2B3A33') + R(630, 80, 300, 100, '#33463D') + [0, 1, 2, 3].map((i) => R(650, 96 + i * 20, 120 + (i % 2) * 80, 5, '#F6E7C8')).join('');
       s += [200, 500, 800].map((x) => R(x - 2, 0, 4, 40, '#3C4A5C') + R(x - 18, 40, 36, 16, '#E3A72F')).join('');
-      s += R(10, 520, 40, 60, '#6FA85A') + R(18, 580, 24, 40, '#B07A4A') + R(950, 520, 40, 60, '#6FA85A') + R(958, 580, 24, 40, '#B07A4A');
-      return s + drawTables(this.seats, { chair: chairOf('#B45309', '#8F4207'), top: '#D9A97A', apron: '#A26F43', leg: '#5E3523', deco: cups }) + sign(name, 8, '#D9694B');
+      return s + R(440, 540, 40, 60, '#6FA85A') + R(448, 600, 24, 40, '#B07A4A');
     },
+    items: () => [
+      roundTable(190, 330, CAFE), roundTable(500, 330, CAFE), roundTable(810, 330, CAFE),
+      booth([200, 300], 525, '#A23E5A', CAFE),
+      barCounter([640, 750, 860], 525, { stool: '#3C4A5C', top: '#8C4F33', front: '#5E3523', deco: cups }),
+    ],
+    sign: (n) => sign(n, 8, '#D9694B'),
   },
   teahouse: {
-    seats: smallTables([330, 520]),
-    art(name) {
-      let s = R(0, 0, 1000, 230, '#7A3E2E') + planks(230, '#C9A06A', '#B08A56');
+    bg() {
+      let s = R(0, 0, 1000, 230, '#7A3E2E') + planks(230, '#C9A06A', '#B08A56') + R(60, 495, 880, 100, '#D9C48A') + R(60, 495, 880, 4, '#B8A06A');
       [[60, 70], [740, 70]].forEach(([x, y]) => { s += R(x, y, 200, 130, '#F6E7C8'); for (let i = 1; i < 4; i++) s += R(x + i * 50 - 3, y, 6, 130, '#5E3523') + R(x, y + i * 32 - 3, 200, 6, '#5E3523'); });
-      s += [320, 680].map((x) => R(x - 2, 0, 4, 60, '#2B1D14') + R(x - 22, 60, 44, 54, '#D94A3A') + R(x - 22, 70, 44, 6, '#D9A93B') + R(x - 22, 98, 44, 6, '#D9A93B')).join('');
-      return s + drawTables(this.seats, { chair: chairOf('#5E3523', '#2B1D14'), top: '#7A3E2E', apron: '#5E2A1E', leg: '#2B1D14', deco: teapot, legH: 26 }) + sign(name, 120, '#2B1D14', '#D9A93B');
+      return s + [320, 680].map((x) => R(x - 2, 0, 4, 60, '#2B1D14') + R(x - 22, 60, 44, 54, '#D94A3A') + R(x - 22, 70, 44, 6, '#D9A93B') + R(x - 22, 98, 44, 6, '#D9A93B')).join('');
     },
+    items: () => [
+      longTable([150, 250], 340, TEA), longTable([450, 550], 340, TEA), longTable([750, 850], 340, TEA),
+      lowTable(200, 555, TEA_LOW), lowTable(500, 555, TEA_LOW), lowTable(800, 555, TEA_LOW),
+    ],
+    sign: (n) => sign(n, 120, '#2B1D14', '#D9A93B'),
   },
   shop: {
-    seats: [{ cx: 500, y: 320, w: 860, seats: [150, 290, 430, 570, 710, 850] }, ...longTables([520])],
-    art(name) {
+    bg() {
       const cols = ['#F07F6A', '#3B7FC4', '#E3A72F', '#2E9E5B', '#A23E5A', '#F4F4F0'];
       let s = R(0, 0, 1000, 240, '#F4F4F0') + tiles(240, '#E6EAEE', '#D5DCE3', 50);
       for (let r = 0; r < 3; r++) { s += R(30, 80 + r * 52, 940, 8, '#9AA7B4'); for (let x = 40, k = r; x < 960; x += 26, k++) s += R(x, 50 + r * 52, 20, 30, cols[k % cols.length]); }
-      s += R(0, 0, 1000, 26, '#3B7FC4') + R(0, 26, 1000, 8, '#2E9E5B');
-      return s + drawTables(this.seats, { chair: stoolOf('#3C4A5C'), top: '#F4F4F0', apron: '#9AA7B4', leg: '#5E6B78', deco: goods }) + sign(name, 186, '#3B7FC4');
+      return s + R(0, 0, 1000, 26, '#3B7FC4') + R(0, 26, 1000, 8, '#2E9E5B');
     },
+    items: () => [barCounter([150, 290, 430, 570, 710, 850], 320, SHOP_BAR), roundTable(260, 525, SHOP), roundTable(740, 525, SHOP)],
+    sign: (n) => sign(n, 186, '#3B7FC4'),
   },
   lab: {
-    seats: longTables([320, 520]),
-    art(name) {
+    bg() {
       let s = R(0, 0, 1000, 230, '#DCE6EE') + tiles(230, '#EEF2F5', '#E1E8EE', 70);
       s += R(40, 40, 260, 170, '#9AA7B4') + R(56, 56, 228, 110, '#C9D6E0') + R(56, 176, 228, 20, '#7E97AD');
       s += R(700, 40, 260, 150, '#FFFFFF') + R(700, 40, 260, 150, 'none', ' stroke="#9AA7B4" stroke-width="6"') + R(730, 80, 120, 5, '#3B5BA9') + R(730, 104, 170, 5, '#3B5BA9') + R(730, 128, 90, 5, '#A23E5A');
-      s += R(330, 90, 330, 10, '#9AA7B4') + [360, 420, 480, 560, 620].map((x, i) => R(x, 56, 20, 34, ['#9CCBDB', '#F2B6C6', '#A8D08D', '#F6E7A8', '#9CCBDB'][i])).join('');
-      return s + drawTables(this.seats, { chair: stoolOf('#3C4A5C'), top: '#3C4A5C', apron: '#2B2F36', leg: '#7E97AD', deco: scope }) + sign(name, 140, '#7E97AD');
+      return s + R(330, 90, 330, 10, '#9AA7B4') + [360, 420, 480, 560, 620].map((x, i) => R(x, 56, 20, 34, ['#9CCBDB', '#F2B6C6', '#A8D08D', '#F6E7A8', '#9CCBDB'][i])).join('');
     },
+    items: () => [
+      longTable([140, 260, 380], 320, LAB), longTable([620, 740, 860], 320, LAB),
+      longTable([140, 260, 380], 525, LAB), roundTable(760, 525, { ...OFFICE, top: '#9CCBDB', apron: '#7E97AD', deco: books }),
+    ],
+    sign: (n) => sign(n, 140, '#7E97AD'),
   },
   tower: {
-    seats: longTables([340, 530]),
-    art(name) {
-      let s = R(0, 0, 1000, 250, '#5E6B78') + windowSky(30, 20, 940, 210) + tiles(250, '#C9C2B4', '#BDB5A6', 80);
-      return s + drawTables(this.seats, { chair: chairOf('#2B2F36', '#1F2A24'), top: '#E8E2D6', apron: '#9AA7B4', leg: '#5E6B78', deco: monitor }) + sign(name, 186, '#2E7D5B');
-    },
+    bg: () => R(0, 0, 1000, 250, '#5E6B78') + windowSky(30, 20, 940, 210) + tiles(250, '#C9C2B4', '#BDB5A6', 80) + R(470, 470, 60, 120, '#6FA85A') + R(482, 590, 36, 40, '#9AA7B4'),
+    items: () => [
+      longTable([140, 260, 380], 335, OFFICE), longTable([620, 740, 860], 335, OFFICE),
+      sofa(260, 560, '#3C4A5C'), roundTable(760, 545, { ...OFFICE, chair: chairOf('#C9705A', '#A2523F'), deco: cups }),
+    ],
+    sign: (n) => sign(n, 186, '#2E7D5B'),
   },
   temple: {
-    seats: smallTables([360, 540]),
-    art(name) {
+    bg() {
       let s = R(0, 0, 1000, 640, '#D8CDB8');
       for (let y = 250; y < 640; y += 40) for (let x = (y / 40) % 2 ? 0 : 40; x < 1000; x += 80) s += R(x, y, 76, 36, '#CDBFA6');
       s += R(0, 0, 1000, 120, '#BFE3F0') + R(0, 150, 1000, 100, '#C94F3D') + R(0, 120, 1000, 34, '#3C4A5C') + R(300, 70, 400, 30, '#C94F3D') + R(260, 56, 480, 18, '#3C4A5C') + R(440, 180, 120, 70, '#7A2E22');
-      s += trees([[70, 300, 1.2], [930, 300, 1.2]], '#3E6B5A', '#6B3E1F');
-      return s + drawTables(this.seats, { chair: stoolOf('#9AA7B4'), top: '#B9B2A4', apron: '#8C877C', leg: '#8C877C', deco: teapot, legH: 30 }) + sign(name, 186, '#3C4A5C', '#D9A93B');
+      return s + trees([[70, 300, 1.2], [930, 300, 1.2]], '#3E6B5A', '#6B3E1F') + lawn(60, 520, 880, 116);
     },
+    items: () => [
+      roundTable(190, 370, STONE), roundTable(500, 370, STONE), roundTable(810, 370, STONE),
+      blanket(280, 580, '#3E6B5A'), blanket(720, 580, '#C94F3D'),
+    ],
+    sign: (n) => sign(n, 186, '#3C4A5C', '#D9A93B'),
   },
   park: {
-    seats: smallTables([360, 540]),
-    art(name) {
+    bg() {
       let s = R(0, 0, 1000, 120, '#BFE3F0') + R(0, 120, 1000, 520, '#A8D08D');
       s += trees([[80, 190], [240, 170, 0.8], [760, 170, 0.8], [920, 190]]);
-      s += R(0, 250, 1000, 40, '#E8D7AE') + [[120, 600], [480, 610], [880, 600], [300, 450], [700, 440]].map(([x, y]) => R(x, y, 10, 10, '#F2B6C6') + R(x + 14, y + 4, 8, 8, '#F6E7A8')).join('');
-      return s + drawTables(this.seats, { chair: chairOf('#B07A4A', '#8C4F33'), top: '#C98B5E', apron: '#8C4F33', leg: '#6B3E1F', deco: picnic, legH: 30 }) + sign(name, 30, '#5E8F4A');
+      return s + R(0, 250, 1000, 40, '#E8D7AE') + [[90, 620], [480, 625], [900, 620], [330, 470], [660, 470]].map(([x, y]) => R(x, y, 10, 10, '#F2B6C6') + R(x + 14, y + 4, 8, 8, '#F6E7A8')).join('');
     },
+    items: () => [
+      bench(190, 360), roundTable(500, 360, PICNIC), bench(810, 360),
+      blanket(190, 565, '#C94F3D'), blanket(500, 565, '#3B7FC4'), blanket(810, 565, '#E3A72F'),
+    ],
+    sign: (n) => sign(n, 30, '#5E8F4A'),
   },
   lake: {
-    seats: smallTables([370, 545]),
-    art(name) {
+    bg() {
       let s = R(0, 0, 1000, 90, '#BFE3F0') + R(0, 90, 1000, 170, '#8EC5DA') + [[80, 140, 60], [400, 200, 80], [700, 130, 50], [860, 220, 70]].map(([x, y, w]) => R(x, y, w, 5, '#BFE3F0')).join('');
       s += trees([[60, 90, 0.7], [180, 80, 0.5], [880, 86, 0.6]], '#5E8F4A');
       s += planks(260, '#C9A06A', '#A9824F') + R(0, 252, 1000, 12, '#8C6A44') + [40, 960].map((x) => R(x, 120, 6, 70, '#5E8F4A') + R(x + 12, 140, 6, 50, '#5E8F4A')).join('');
-      return s + drawTables(this.seats, { chair: chairOf('#8C4F33', '#6B3E1F'), top: '#E8D7AE', apron: '#B08A56', leg: '#6B3E1F', deco: cups, legH: 30 }) + sign(name, 16, '#1F6F8B');
+      return s + R(0, 455, 1000, 185, '#A8D08D') + R(0, 455, 1000, 8, '#8C6A44') + [[120, 610], [470, 620], [860, 612]].map(([x, y]) => R(x, y, 10, 10, '#F2B6C6')).join('');
     },
+    items: () => [
+      roundTable(190, 370, DECK), roundTable(500, 370, DECK), roundTable(810, 370, DECK),
+      blanket(190, 568, '#1F6F8B'), blanket(500, 568, '#C94F3D'), blanket(810, 568, '#6B4FA0'),
+    ],
+    sign: (n) => sign(n, 16, '#1F6F8B'),
   },
   beach: {
-    seats: smallTables([380, 550]),
-    art(name) {
-      let s = R(0, 0, 1000, 80, '#BFE3F0') + R(0, 80, 1000, 140, '#5FA8C9') + R(0, 200, 1000, 30, '#BFE3F0') + R(0, 220, 1000, 420, '#F2E3B3');
-      [190, 500, 810].forEach((x) => { s += R(x - 3, 240, 6, 130, '#8C4F33') + R(x - 90, 226, 180, 16, '#F07F6A') + R(x - 66, 212, 132, 16, '#F07F6A') + R(x - 30, 212, 30, 30, '#FBF2E6'); });
-      return s + drawTables(this.seats, { chair: chairOf('#3B7FC4', '#2B5E94'), top: '#FBF2E6', apron: '#D9C4A0', leg: '#B07A4A', deco: shell, legH: 30 }) + sign(name, 110, '#F07F6A');
-    },
+    bg: () => R(0, 0, 1000, 80, '#BFE3F0') + R(0, 80, 1000, 140, '#5FA8C9') + R(0, 200, 1000, 30, '#BFE3F0') + R(0, 220, 1000, 420, '#F2E3B3') + umbrella(250, 400) + umbrella(750, 400, '#2E9E5B'),
+    items: () => [
+      roundTable(250, 380, BEACH), roundTable(750, 380, BEACH),
+      towels(190, 575), towels(500, 575, '#2E9E5B', '#E3A72F'), towels(810, 575, '#6B4FA0', '#3B7FC4'),
+    ],
+    sign: (n) => sign(n, 110, '#F07F6A'),
   },
 };
 
@@ -257,12 +342,12 @@ const sceneFor = (kind, key) => SPECIAL[key] || SCENES[kind] || SCENES.library;
 // 座位列表（扁平）· flat seat list; key = "city/place" picks a place-specific scene if there is one
 export function seatsOf(kind, key) {
   const sc = sceneFor(kind, key);
-  const out = [];
-  sc.seats.forEach((t) => t.seats.forEach((x) => out.push({ x, y: t.y })));
-  return out;
+  if (sc.items) return sc.items().flatMap((it) => it.seats);
+  return sc.seats.flatMap((t) => t.seats.map((x) => seat(x, t.y, t.pose)));
 }
 
 export function interiorSVG(kind, name, key) {
   const sc = sceneFor(kind, key);
-  return `<g ${P}>${sc.art(name)}</g>`;
+  const art = sc.items ? sc.bg() + sc.items().map((it) => it.svg).join('') + sc.sign(name) : sc.art(name);
+  return `<g ${P}>${art}</g>`;
 }

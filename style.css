@@ -132,6 +132,8 @@ h2 { font-size: 18px; }
 /* 地点内部 · inside a place */
 .avatar.seated svg { height: 37px; }              /* 34 × 13/12：只画腰部以上 · waist-up */
 .avatar.me.seated svg { height: 43px; }
+.avatar.ground svg { height: 43px; }               /* 34 × 15/12：盘腿坐 · cross-legged */
+.avatar.me.ground svg { height: 50px; }
 .avatar.seated .nm { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); margin: 0; }
 .seat-btn {
   position: absolute; transform: translate(-50%, -115%); pointer-events: auto;
@@ -258,6 +260,7 @@ h2 { font-size: 18px; }
   }
   .avatar .nm { display: none; }
   .avatar.seated svg, .avatar.me.seated svg { height: 17px; }
+  .avatar.ground svg, .avatar.me.ground svg { height: 20px; }
   .seat-btn { width: 18px; height: 18px; font-size: 12px; border-width: 1.5px; }
   .avatar .zz { top: -4px; right: -8px; font-size: 8px; line-height: 1.2; padding: 0 2px; border-radius: 4px; }
   .avatar .tip { font-size: 11px; padding: 4px 8px; }

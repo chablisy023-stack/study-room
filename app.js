@@ -251,7 +251,7 @@ function renderRoom() {
     const top = `${s.y / 6.4}%`;
     const u = seat[i];
     if (u) {
-      const a = makeAvatar(u, true);
+      const a = makeAvatar(u, s.pose);
       a.style.left = left;
       a.style.top = top;
       av.appendChild(a);
@@ -368,11 +368,13 @@ const t_locked = () => T().locked;
 const isMeUser = (u) => (u.uid || u.id) === backend.uid;
 
 // 一个小人（名牌 + 悬停提示）· one character with name tag and hover tip
-function makeAvatar(u, seated = false) {
+// pose: 'stand' | 'seat'（桌子后面）| 'ground'（坐地上 / on the grass）
+function makeAvatar(u, pose = 'stand') {
   const t = T();
-  const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMeUser(u) ? ' me' : ''}${seated ? ' seated' : ''}`);
+  const seated = pose !== 'stand';
+  const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMeUser(u) ? ' me' : ''}${seated ? ' seated' : ''}${pose === 'ground' ? ' ground' : ''}`);
   a.tabIndex = 0;
-  a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR, seated);
+  a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR, pose);
   const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
   a.setAttribute('aria-label', label);
   a.appendChild(el('span', 'nm', u.name));
