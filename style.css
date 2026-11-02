@@ -190,6 +190,25 @@ h2 { font-size: 18px; }
 .seg { display: inline-flex; background: #EAF0E7; border-radius: 10px; padding: 3px; }
 .seg button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
 .seg button[aria-pressed="true"] { background: #fff; font-weight: 700; }
+/* 语言切换 · language toggle */
+.lang-seg { border: 1px solid #C3CEC0; }
+.lang-seg button { min-width: 52px; }
+.lang-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* 开始页地图选择 · start-page location picker */
+.picker { display: flex; flex-direction: column; gap: 10px; }
+.picker .map.mini { border-radius: 10px; }
+.map.mini .city-pin .lbl { font-size: 11px; padding: 1px 7px; border-width: 1.5px; }
+.map.mini .city-pin .pin { width: 18px; height: 18px; border-width: 2px; }
+.map.mini .city-pin.here .pin { width: 22px; height: 22px; }
+.map.mini .city-pin.here .lbl { background: var(--accent); }
+.map.mini .city-pin.lbl-bottom { transform: translate(-50%, -9px); }
+.map.mini .city-pin.lbl-top { transform: translate(-50%, calc(-100% + 9px)); }
+.map.mini .city-pin.lbl-left { transform: translate(calc(-100% + 9px), -50%); }
+.pick-label { font-weight: 500; }
+.picker .swatches .sw.txt { height: auto; min-height: 36px; }
+.picker .swatches .sw.txt[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--accent); font-weight: 700; }
+.pick-where { color: var(--accent); font-weight: 700; }
 .board { list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .board li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; }
 .board li.me { background: var(--accent-soft); font-weight: 700; }
@@ -241,4 +260,12 @@ h2 { font-size: 18px; }
   .city-pin .lbl { font-size: 10px; padding: 1px 6px; }
   .city-pin .pin { width: 16px; height: 16px; border-width: 2px; }
   .layout { padding: 12px; }
+  .join-card { padding: 18px; }
+  .lang-seg button { min-width: 0; padding: 0 9px; }
+  .map.mini .city-pin .lbl { font-size: 9px; line-height: 1.3; padding: 0 5px; }
+  .map.mini .city-pin .pin { width: 14px; height: 14px; }
+  .map.mini .city-pin.here .pin { width: 17px; height: 17px; }
+  .map.mini .city-pin.lbl-bottom { transform: translate(-50%, -7px); }
+  .map.mini .city-pin.lbl-top { transform: translate(-50%, calc(-100% + 7px)); }
+  .map.mini .city-pin.lbl-left { transform: translate(calc(-100% + 7px), -50%); }
 }

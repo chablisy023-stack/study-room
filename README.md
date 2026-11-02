@@ -1,4 +1,4 @@
-# 自习小镇 Study Town
+# 自习室 Study Room
 
 一个在线自习室：大家在**小镇地图**上一起学习。
 An online study room where everyone studies together on a little **town map**.
@@ -13,7 +13,8 @@ An online study room where everyone studies together on a little **town map**.
 - 💬 留言板：每条 ≤200 字、30 秒一条、简单敏感词过滤
 - 📊 打卡与排行：今日/本周学习时长排行，满 25 分钟自动打卡，记录连续天数
 - 🍅 同步番茄钟（可选）：全小镇每半小时一轮（25 分钟专注 + 5 分钟休息）
-- 🌐 中文 / English 一键切换
+- 🌐 中文 / English 一键切换（页面右上角「中文 | EN」）
+- 🗺️ 开始前在世界地图上选择城市和自习地点
 
 ## 两种模式 Modes
 | 模式 | 什么时候 | 效果 |

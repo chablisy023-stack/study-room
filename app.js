@@ -129,13 +129,14 @@ function renderBuilder() {
 function applyLang() {
   const t = T();
   document.documentElement.lang = state.lang === 'zh' ? 'zh' : 'en';
-  document.title = state.lang === 'zh' ? '自习小镇 Study Town' : 'Study Town 自习小镇';
+  document.title = state.lang === 'zh' ? '自习室 Study Room' : 'Study Room 自习室';
   document.querySelectorAll('[data-i18n]').forEach((e) => { const v = t[e.dataset.i18n]; if (typeof v === 'string') e.textContent = v; });
   document.querySelectorAll('[data-i18n-ph]').forEach((e) => { e.placeholder = t[e.dataset.i18nPh]; });
   document.querySelectorAll('[data-i18n-aria]').forEach((e) => { e.setAttribute('aria-label', t[e.dataset.i18nAria]); });
-  document.querySelectorAll('.lang-btn').forEach((b) => { b.textContent = t.lang; b.setAttribute('aria-label', t.langAria); });
+  document.querySelectorAll('.lang-seg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === state.lang ? 'true' : 'false'));
   $('mode-tag').textContent = backend && backend.mode === 'demo' ? t.demoTag : '';
   renderBuilder();
+  renderPicker();
   renderAll();
 }
 
@@ -215,19 +216,70 @@ function renderWorld() {
   const counts = cityCounts();
   CITIES.forEach((c) => {
     const unlocked = state.unlocked.includes(c.id);
-    const b = el('button', 'city-pin' + (unlocked ? '' : ' locked') + (c.id === state.profile.city ? ' here' : ''));
-    b.type = 'button';
-    b.classList.add(`lbl-${c.lbl || 'bottom'}`);
-    b.style.left = `${c.wx / 10}%`;
-    b.style.top = `${c.wy / 5.6}%`;
-    const pin = el('span', 'pin');
-    if (!unlocked) pin.innerHTML = LOCK_SVG;
-    const lbl = el('span', 'lbl', unlocked ? `${L(c)} · ${counts[c.id] || 0}` : `${L(c)} · ${t_locked()}`);
-    b.append(pin, lbl);
-    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${counts[c.id] || 0} ${T().online}` : `${L(c)}, ${T().locked}`);
+    const n = counts[c.id] || 0;
+    const b = cityPin(c, unlocked ? `${L(c)} · ${n}` : `${L(c)} · ${t_locked()}`);
+    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${n} ${T().online}` : `${L(c)}, ${T().locked}`);
     b.addEventListener('click', () => (unlocked ? goCity(c.id) : openUnlock(c.id)));
     box.appendChild(b);
   });
+}
+
+// 世界地图上的城市图钉 · a city pin on the world map (in-app map and start-page picker)
+function cityPin(c, text) {
+  const unlocked = state.unlocked.includes(c.id);
+  const b = el('button', 'city-pin' + (unlocked ? '' : ' locked') + (c.id === state.profile.city ? ' here' : ''));
+  b.type = 'button';
+  b.classList.add(`lbl-${c.lbl || 'bottom'}`);
+  b.style.left = `${c.wx / 10}%`;
+  b.style.top = `${c.wy / 5.6}%`;
+  const pin = el('span', 'pin');
+  if (!unlocked) pin.innerHTML = LOCK_SVG;
+  b.append(pin, el('span', 'lbl', text));
+  return b;
+}
+
+/* ---------------- 开始页：选择自习地点 · start page: choose where to study ---------------- */
+function renderPicker() {
+  const t = T();
+  const svg = $('pick-svg');
+  if (!svg.firstChild) svg.innerHTML = worldSVG();
+  const counts = cityCounts();
+  const box = $('pick-cities');
+  box.innerHTML = '';
+  CITIES.forEach((c) => {
+    const unlocked = state.unlocked.includes(c.id);
+    const n = counts[c.id] || 0;
+    const b = cityPin(c, L(c));
+    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${n} ${t.online}` : `${L(c)}, ${t.locked}`);
+    b.setAttribute('aria-pressed', c.id === state.profile.city ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      if (!unlocked) { toast(t.pickLocked(L(c))); return; }
+      if (c.id !== state.profile.city) {
+        state.profile.city = c.id;
+        state.profile.place = c.places[0].id;
+        saveProfile();
+      }
+      renderPicker();
+    });
+    box.appendChild(b);
+  });
+
+  const city = curCity();
+  if (!city.places.some((p) => p.id === state.profile.place)) state.profile.place = city.places[0].id;
+  const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
+  $('pick-places-label').textContent = t.pickPlaces(L(city));
+  const pb = $('pick-places');
+  pb.setAttribute('aria-label', t.pickPlaces(L(city)));
+  pb.innerHTML = '';
+  city.places.forEach((p) => {
+    const n = here.filter((u) => u.place === p.id).length;
+    const b = el('button', 'sw txt', `${L(p)} · ${n}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', p.id === state.profile.place ? 'true' : 'false');
+    b.addEventListener('click', () => { state.profile.place = p.id; saveProfile(); renderPicker(); });
+    pb.appendChild(b);
+  });
+  $('pick-where').textContent = t.pickWhere(L(city), L(curPlace()));
 }
 const t_locked = () => T().locked;
 
@@ -476,6 +528,7 @@ async function endSession(silent) {
   await backend.leave();
   $('town').hidden = true;
   $('join').hidden = false;
+  renderPicker();
   if (!silent) toast(T().ended(mins));
   renderOnline();
 }
@@ -556,7 +609,10 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn || btn.disabled) return;
   const a = btn.dataset.action;
-  if (a === 'lang') { state.lang = state.lang === 'zh' ? 'en' : 'zh'; lsSet('st-lang', state.lang); applyLang(); }
+  if (a === 'lang') {
+    const next = btn.dataset.lang;
+    if (next && next !== state.lang) { state.lang = next; lsSet('st-lang', state.lang); applyLang(); }
+  }
   else if (a === 'pomo') {
     state.profile.pomo = !state.profile.pomo;
     saveProfile();
@@ -627,6 +683,7 @@ window.addEventListener('pagehide', () => {
     state.presence = list;
     renderOnline();
     if (state.inTown) { if (state.view === 'world') renderWorld(); else renderTown(); }
+    else renderPicker();
   });
   backend.onMessages((msgs) => { state.messages = msgs; if (state.inTown) renderMessages(); });
   $('join-form').addEventListener('submit', enterTown);
