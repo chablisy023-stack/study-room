@@ -12,7 +12,9 @@ export function randomAvatar(seed) {
   return { skin: h % SKINS.length, hair: (h >> 3) % HAIRS.length, style: (h >> 6) % STYLES.length, shirt: (h >> 9) % SHIRTS.length };
 }
 
-export function spriteSVG(a = DEFAULT_AVATAR) {
+// pose: 'stand'（默认）· 'seat' 只画腰部以上，坐在桌子后面 / waist-up behind a desk
+//       'ground' 盘腿坐在地上 / sitting cross-legged on the floor or grass
+export function spriteSVG(a = DEFAULT_AVATAR, pose = 'stand') {
   const skin = SKINS[a.skin] || SKINS[0];
   const hair = HAIRS[a.hair] || HAIRS[0];
   const shirt = SHIRTS[a.shirt] || SHIRTS[0];
@@ -22,7 +24,12 @@ export function spriteSVG(a = DEFAULT_AVATAR) {
   if (style === 'long') back = r(2, 2, 8, 9, hair);
   if (style === 'bun') top = r(4, 0, 4, 2, hair);
   if (style === 'short') top = r(2, 3, 1, 2, hair) + r(9, 3, 1, 2, hair);
-  return `<svg viewBox="0 0 12 18" shape-rendering="crispEdges" aria-hidden="true">
+  const pants = '#3C4A5C';
+  const legs = pose === 'ground'
+    ? r(0.5, 12.6, 11, 2.2, pants) + r(4, 12.6, 4, 1, shirt) + r(0, 14.2, 2.2, 0.8, '#1F2A24') + r(9.8, 14.2, 2.2, 0.8, '#1F2A24')
+    : r(4, 13, 1.8, 3.5, pants) + r(6.2, 13, 1.8, 3.5, pants) + r(3.6, 16.5, 2.4, 1.5, '#1F2A24') + r(6, 16.5, 2.4, 1.5, '#1F2A24');
+  const h = pose === 'seat' ? 13 : pose === 'ground' ? 15 : 18;
+  return `<svg viewBox="0 0 12 ${h}" shape-rendering="crispEdges" aria-hidden="true">
     ${back}
     ${r(3, 2, 6, 6, skin)}
     ${r(2, 1, 8, 2, hair)}${r(3, 3, 6, 1, hair)}${top}
@@ -30,7 +37,6 @@ export function spriteSVG(a = DEFAULT_AVATAR) {
     ${r(5, 7, 2, 0.6, '#C25B4A')}
     ${r(3, 8, 6, 5, shirt)}${r(2, 9, 1, 3, shirt)}${r(9, 9, 1, 3, shirt)}
     ${r(2, 12, 1, 1, skin)}${r(9, 12, 1, 1, skin)}
-    ${r(4, 13, 1.8, 3.5, '#3C4A5C')}${r(6.2, 13, 1.8, 3.5, '#3C4A5C')}
-    ${r(3.6, 16.5, 2.4, 1.5, '#1F2A24')}${r(6, 16.5, 2.4, 1.5, '#1F2A24')}
+    ${pose === 'seat' ? '' : legs}
   </svg>`;
 }

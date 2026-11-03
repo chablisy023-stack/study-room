@@ -1,6 +1,8 @@
 import { STR } from './i18n.js';
 import { createBackend, dayKey } from './backend.js';
 import { CITIES, SLOTS, SOUND_OF, cityById, worldSVG, townSVG } from './cities.js';
+import { interiorSVG, seatsOf, weatherArea, walkPath } from './interiors.js';
+import { weatherFor, WEATHERS, WEATHER_ICON } from './weather.js';
 import { SKINS, HAIRS, STYLES, SHIRTS, DEFAULT_AVATAR, spriteSVG } from './avatar.js';
 import { playAmbient, stopAmbient, setVolume } from './sound.js';
 
@@ -38,6 +40,8 @@ const state = {
   sound: lsGet('st-sound', false),
   vol: lsGet('st-vol', 50),
   unlockTarget: null,
+  weatherKey: null,
+  walking: null,
 };
 if (!state.unlocked.includes(state.profile.city)) state.profile.city = 'linkoping';
 let backend = null;
@@ -85,10 +89,48 @@ function streak() {
 }
 
 /* ---------------- sound ---------------- */
+/* ---------------- 天气 · weather ---------------- */
+// 网址加 ?weather=rain 等可固定天气，方便预览 · add ?weather=rain (etc.) to the URL to preview a weather
+const FORCED_WEATHER = (() => { try { const w = new URLSearchParams(location.search).get('weather'); return WEATHERS.includes(w) ? w : null; } catch { return null; } })();
+const curWeather = () => FORCED_WEATHER || weatherFor(curCity().id);
+const OUTDOOR = new Set(['park', 'lake', 'beach', 'temple']);
+
+function renderWeather() {
+  const box = $('weather');
+  const chip = $('weather-chip');
+  if (state.view === 'world') { box.hidden = true; chip.hidden = true; return; }
+  const t = T();
+  const w = curWeather();
+  chip.hidden = false;
+  chip.textContent = `${WEATHER_ICON[w]} ${t.weather[w]}`;
+  chip.setAttribute('aria-label', t.weatherAria(L(curCity()), t.weather[w]));
+  chip.title = t.weatherAria(L(curCity()), t.weather[w]);
+  // 城市地图：整个画面；地点内部：户外整个画面，室内只在窗户里 · city: everywhere; inside: outdoors everywhere, indoors only the windows
+  const area = state.view === 'room' ? weatherArea(curPlace().kind, `${curCity().id}/${curPlace().id}`) : { x: 0, y: 0, w: 1000, h: 640 };
+  box.hidden = !area;
+  if (!area) return;
+  box.className = `weather w-${w}`;
+  box.style.left = `${area.x / 10}%`;
+  box.style.top = `${area.y / 6.4}%`;
+  box.style.width = `${area.w / 10}%`;
+  box.style.height = `${area.h / 6.4}%`;
+}
+
+// 每 20 秒看看天气有没有变 · check every 20 s whether the weather changed
+setInterval(() => {
+  if (!state.inTown) return;
+  const key = `${curCity().id}:${curWeather()}`;
+  if (state.weatherKey && key !== state.weatherKey && key.split(':')[0] === state.weatherKey.split(':')[0]) {
+    toast(T().weatherChanged(L(curCity()), T().weather[curWeather()]));
+  }
+  if (key !== state.weatherKey) { state.weatherKey = key; renderWeather(); syncSound(); }
+}, 20000);
+
 function syncSound() {
   const b = $('sound-btn');
   const t = T();
-  const kind = SOUND_OF[curPlace().kind];
+  // 在户外又碰上下雨，就换成雨声 · outdoors in the rain, play the rain sound
+  const kind = OUTDOOR.has(curPlace().kind) && curWeather() === 'rain' ? 'rain' : SOUND_OF[curPlace().kind];
   b.textContent = state.sound ? `${t.soundOn} · ${t.soundNames[kind]}` : t.soundOff;
   b.setAttribute('aria-pressed', state.sound ? 'true' : 'false');
   $('vol').value = state.vol;
@@ -129,13 +171,14 @@ function renderBuilder() {
 function applyLang() {
   const t = T();
   document.documentElement.lang = state.lang === 'zh' ? 'zh' : 'en';
-  document.title = state.lang === 'zh' ? '自习小镇 Study Town' : 'Study Town 自习小镇';
+  document.title = state.lang === 'zh' ? '自习室 Study Room' : 'Study Room 自习室';
   document.querySelectorAll('[data-i18n]').forEach((e) => { const v = t[e.dataset.i18n]; if (typeof v === 'string') e.textContent = v; });
   document.querySelectorAll('[data-i18n-ph]').forEach((e) => { e.placeholder = t[e.dataset.i18nPh]; });
   document.querySelectorAll('[data-i18n-aria]').forEach((e) => { e.setAttribute('aria-label', t[e.dataset.i18nAria]); });
-  document.querySelectorAll('.lang-btn').forEach((b) => { b.textContent = t.lang; b.setAttribute('aria-label', t.langAria); });
+  document.querySelectorAll('.lang-seg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.lang === state.lang ? 'true' : 'false'));
   $('mode-tag').textContent = backend && backend.mode === 'demo' ? t.demoTag : '';
   renderBuilder();
+  renderPicker();
   renderAll();
 }
 
@@ -187,20 +230,192 @@ function renderPomo() {
   $('pomo-clock').textContent = `${String(Math.floor(p.left / 60)).padStart(2, '0')}:${String(p.left % 60).padStart(2, '0')}`;
 }
 
+// 三层：世界地图 → 城市 → 地点内部 · three levels: world → city → inside a place
 function renderMap() {
   const t = T();
-  const world = state.view === 'world';
+  const view = state.view;
+  const world = view === 'world';
   const map = $('map');
   map.classList.toggle('world', world);
+  map.classList.toggle('room', view === 'room');
+  stopWalking();
+  $('auto-seat-btn').hidden = view !== 'room';
   const svg = $('map-svg');
   svg.setAttribute('viewBox', world ? '0 0 1000 560' : '0 0 1000 640');
-  svg.innerHTML = world ? worldSVG() : townSVG(curCity());
-  $('world-btn').hidden = world;
-  $('world-btn').textContent = `← ${t.world}`;
-  $('map-title').textContent = world ? t.world : L(curCity());
-  $('map-hint').textContent = world ? t.worldHint : t.townHint;
-  if (world) renderWorld(); else renderTown();
+  svg.innerHTML = world ? worldSVG() : view === 'room' ? interiorSVG(curPlace().kind, L(curPlace()), `${curCity().id}/${curPlace().id}`) : townSVG(curCity());
+  const back = $('world-btn');
+  back.hidden = world;
+  back.dataset.action = view === 'room' ? 'town' : 'world';
+  back.textContent = `← ${view === 'room' ? L(curCity()) : t.world}`;
+  $('map-title').textContent = world ? t.world : view === 'room' ? L(curPlace()) : L(curCity());
+  $('map-hint').textContent = world ? t.worldHint : view === 'room' ? t.roomHint : t.townHint;
+  state.weatherKey = `${curCity().id}:${curWeather()}`;
+  renderWeather();
+  renderView();
 }
+function renderView() {
+  if (state.view === 'world') renderWorld();
+  else if (state.view === 'room') renderRoom();
+  else renderTown();
+}
+
+/* ---------------- 地点内部：座位 · inside a place: seats ---------------- */
+const seatPref = (id, n) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % n; };
+
+// seat = -1：刚走进来、站在门口还没选座位 · just walked in, standing at the door
+const STANDING = -1;
+const ENTRANCE = { x: 500, y: 634 };
+
+// 选了座位的人先坐；站在门口的人留在门口；其他人从各自偏好的位置往后找空位
+// chosen seats first; people at the door stay there; everyone else from a stable preferred seat
+function assignSeats(users, n) {
+  const seat = new Array(n).fill(null);
+  const rest = [];
+  const entering = [];
+  const sorted = [...users].sort((a, b) => (isMeUser(b) - isMeUser(a)) || String(a.id).localeCompare(String(b.id)));
+  sorted.forEach((u) => {
+    const s = u.seat;
+    if (s === STANDING) entering.push(u);
+    else if (Number.isInteger(s) && s >= 0 && s < n && !seat[s]) seat[s] = u;
+    else rest.push(u);
+  });
+  const standing = entering;
+  rest.forEach((u) => {
+    const start = seatPref(u.id, n);
+    let k = 0;
+    while (k < n && seat[(start + k) % n]) k++;
+    if (k < n) seat[(start + k) % n] = u; else standing.push(u);
+  });
+  return { seat, standing };
+}
+
+const pct = (p) => [`${p.x / 10}%`, `${p.y / 6.4}%`];
+const roomSeats = () => seatsOf(curPlace().kind, `${curCity().id}/${curPlace().id}`);
+
+function renderRoom() {
+  const t = T();
+  const city = curCity();
+  const place = curPlace();
+  $('places').innerHTML = '';
+  const av = $('avatars');
+  // 正在走路的自己保留在原处，不打断动画 · keep my walking sprite in place so its animation isn't interrupted
+  const walkingEl = state.walking ? state.walking.el : null;
+  [...av.children].forEach((c) => { if (c !== walkingEl) c.remove(); });
+  const frag = document.createDocumentFragment();
+  const seats = seatsOf(place.kind, `${city.id}/${place.id}`);
+  const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id && u.place === place.id);
+  const { seat, standing } = assignSeats(here, seats.length);
+  seats.forEach((s, i) => {
+    const [left, top] = pct(s);
+    const u = seat[i];
+    if (u && walkingEl && isMeUser(u)) return; // 我正走向这个座位 · I'm on my way to this seat
+    if (u) {
+      const a = makeAvatar(u, s.pose);
+      a.style.left = left;
+      a.style.top = top;
+      frag.appendChild(a);
+    } else {
+      const b = el('button', 'seat-btn', '+');
+      b.type = 'button';
+      b.style.left = left;
+      b.style.top = top;
+      b.setAttribute('aria-label', t.sitHere(i + 1));
+      b.title = t.sitHere(i + 1);
+      b.addEventListener('click', () => walkTo(i));
+      frag.appendChild(b);
+    }
+  });
+  // 门口站着的人（自己排最前），站在不挡座位的位置，最多 5 个 · people at the door (me first), on spots clear of seats, up to 5
+  const spots = doorSpots(seats);
+  standing.filter((u) => !(walkingEl && isMeUser(u))).slice(0, spots.length).forEach((u, k) => {
+    const a = makeAvatar(u, 'stand');
+    a.classList.add('entering');
+    [a.style.left, a.style.top] = pct(spots[k]);
+    frag.appendChild(a);
+  });
+  av.insertBefore(frag, walkingEl);
+  state.freeSeats = seat.map((u, i) => (u ? -1 : i)).filter((i) => i >= 0);
+  $('auto-seat-btn').hidden = !state.freeSeats.length;
+  const meStanding = state.profile.seat === STANDING && !walkingEl;
+  $('map').classList.toggle('choosing', meStanding);
+  const others = standing.filter((u) => !isMeUser(u)).length;
+  // 座位满了：人数写在提示行里 · how many are still looking goes in the hint line
+  $('map-hint').textContent = (meStanding ? t.pickSeat : t.roomHint) + (others ? ` · ${t.standing(others)}` : '');
+}
+
+// 门口能站的位置：从正中往两边找，离座位太近的跳过 · door spots: from the middle outwards, skipping any too close to a seat
+function doorSpots(seats) {
+  const out = [];
+  for (let d = 0; d <= 440 && out.length < 5; d += 56) {
+    for (const x of d ? [ENTRANCE.x - d, ENTRANCE.x + d] : [ENTRANCE.x]) {
+      if (out.length < 5 && !seats.some((s) => Math.abs(s.x - x) < 80 && ENTRANCE.y - s.y < 100)) out.push({ x, y: ENTRANCE.y });
+    }
+  }
+  return out.length ? out : [ENTRANCE];
+}
+
+// 走到座位再坐下：从门口或旧座位出发，沿过道绕开桌子，走到座位旁边再坐下
+// Walk to a seat and sit: from the door or old seat, along the aisles around the furniture, then sit
+function walkTo(i) {
+  const target = roomSeats()[i];
+  if (!target) return;
+  const av = $('avatars');
+  const start = myPosition();
+  const cur = av.querySelector('.avatar.me');
+  // 正坐着就先从原座位站起来；走到一半改主意就从当前位置出发 · seated: stand up from that seat; mid-walk: start from here
+  const fromSeat = cur && cur.classList.contains('seated') && state.profile.seat >= 0 ? state.profile.seat : null;
+  stopWalking();
+  const me = state.presence.find(isMeUser) || { ...state.profile, id: 'me', uid: backend.uid, status: state.status };
+  const el2 = makeAvatar(me, 'stand');
+  el2.classList.add('walking');
+  if (cur) cur.remove();
+  av.appendChild(el2);
+  const pts = walkPath(curPlace().kind, `${curCity().id}/${curPlace().id}`, start, i, fromSeat);
+  const segs = pts.slice(1).map((p, k) => Math.hypot(p.x - pts[k].x, p.y - pts[k].y));
+  const total = segs.reduce((x, y) => x + y, 0) || 1;
+  let acc = 0;
+  const frames = pts.map((p, k) => { if (k) acc += segs[k - 1]; const [left, top] = pct(p); return { left, top, offset: acc / total }; });
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduce ? 0 : Math.max(400, Math.min(4500, (total / 340) * 1000));
+  [el2.style.left, el2.style.top] = pct(pts[pts.length - 1]);
+  const anim = el2.animate(frames, { duration, easing: 'linear' });
+  state.walking = { el: el2, anim };
+  // 先告诉大家我选了这个座位，免得被别人占 · claim the seat right away so nobody else takes it
+  state.profile.seat = i;
+  saveProfile();
+  backend.update({ seat: i });
+  anim.onfinish = () => {
+    if (!state.walking || state.walking.anim !== anim) return;
+    state.walking = null;
+    el2.remove();
+    toast(T().seated(i + 1));
+    renderRoom();
+  };
+}
+// 自动分配：离我最近的空座位 · walk to the free seat closest to where I am now
+function autoSeat() {
+  const free = state.freeSeats || [];
+  if (!free.length) { toast(T().noSeat); return; }
+  const seats = roomSeats();
+  const here = myPosition();
+  const best = free.reduce((a, b) => (Math.hypot(seats[b].x - here.x, seats[b].y - here.y) < Math.hypot(seats[a].x - here.x, seats[a].y - here.y) ? b : a));
+  walkTo(best);
+}
+// 我现在在画布上的位置（脚下）· where I am now on the canvas (at my feet)
+function myPosition() {
+  const cur = $('avatars').querySelector('.avatar.me');
+  if (!cur) return ENTRANCE;
+  const mr = $('map').getBoundingClientRect();
+  const r = cur.querySelector('svg').getBoundingClientRect();
+  return { x: ((r.left + r.width / 2 - mr.left) / mr.width) * 1000, y: ((r.bottom - mr.top) / mr.height) * 640 };
+}
+function stopWalking() {
+  if (!state.walking) return;
+  state.walking.anim.cancel();
+  state.walking.el.remove();
+  state.walking = null;
+}
+
 
 function cityCounts() {
   const c = {};
@@ -215,38 +430,123 @@ function renderWorld() {
   const counts = cityCounts();
   CITIES.forEach((c) => {
     const unlocked = state.unlocked.includes(c.id);
-    const b = el('button', 'city-pin' + (unlocked ? '' : ' locked') + (c.id === state.profile.city ? ' here' : ''));
-    b.type = 'button';
-    b.classList.add(`lbl-${c.lbl || 'bottom'}`);
-    b.style.left = `${c.wx / 10}%`;
-    b.style.top = `${c.wy / 5.6}%`;
-    const pin = el('span', 'pin');
-    if (!unlocked) pin.innerHTML = LOCK_SVG;
-    const lbl = el('span', 'lbl', unlocked ? `${L(c)} · ${counts[c.id] || 0}` : `${L(c)} · ${t_locked()}`);
-    b.append(pin, lbl);
-    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${counts[c.id] || 0} ${T().online}` : `${L(c)}, ${T().locked}`);
+    const n = counts[c.id] || 0;
+    const b = cityPin(c, unlocked ? `${L(c)} · ${n}` : `${L(c)} · ${t_locked()}`);
+    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${n} ${T().online}` : `${L(c)}, ${T().locked}`);
     b.addEventListener('click', () => (unlocked ? goCity(c.id) : openUnlock(c.id)));
     box.appendChild(b);
   });
 }
+
+// 世界地图上的城市图钉 · a city pin on the world map (in-app map and start-page picker)
+function cityPin(c, text) {
+  const unlocked = state.unlocked.includes(c.id);
+  const b = el('button', 'city-pin' + (unlocked ? '' : ' locked') + (c.id === state.profile.city ? ' here' : ''));
+  b.type = 'button';
+  b.classList.add(`lbl-${c.lbl || 'bottom'}`);
+  b.style.left = `${c.wx / 10}%`;
+  b.style.top = `${c.wy / 5.6}%`;
+  const pin = el('span', 'pin');
+  if (!unlocked) pin.innerHTML = LOCK_SVG;
+  b.append(pin, el('span', 'lbl', text));
+  return b;
+}
+
+/* ---------------- 开始页：选择自习地点 · start page: choose where to study ---------------- */
+function renderPicker() {
+  const t = T();
+  const svg = $('pick-svg');
+  if (!svg.firstChild) svg.innerHTML = worldSVG();
+  const counts = cityCounts();
+  const box = $('pick-cities');
+  box.innerHTML = '';
+  CITIES.forEach((c) => {
+    const unlocked = state.unlocked.includes(c.id);
+    const n = counts[c.id] || 0;
+    const b = cityPin(c, L(c));
+    b.setAttribute('aria-label', unlocked ? `${L(c)}, ${n} ${t.online}` : `${L(c)}, ${t.locked}`);
+    b.setAttribute('aria-pressed', c.id === state.profile.city ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      if (!unlocked) { toast(t.pickLocked(L(c))); return; }
+      if (c.id !== state.profile.city) {
+        state.profile.city = c.id;
+        state.profile.place = c.places[0].id;
+        state.profile.seat = null;
+        saveProfile();
+      }
+      renderPicker();
+    });
+    box.appendChild(b);
+  });
+
+  const city = curCity();
+  if (!city.places.some((p) => p.id === state.profile.place)) state.profile.place = city.places[0].id;
+  const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
+  $('pick-places-label').textContent = t.pickPlaces(L(city));
+  const pb = $('pick-places');
+  pb.setAttribute('aria-label', t.pickPlaces(L(city)));
+  pb.innerHTML = '';
+  city.places.forEach((p) => {
+    const n = here.filter((u) => u.place === p.id).length;
+    const b = el('button', 'sw txt', `${L(p)} · ${n}`);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', p.id === state.profile.place ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      if (p.id !== state.profile.place) state.profile.seat = null;
+      state.profile.place = p.id;
+      saveProfile();
+      renderPicker();
+    });
+    pb.appendChild(b);
+  });
+  $('pick-where').textContent = t.pickWhere(L(city), L(curPlace()));
+}
 const t_locked = () => T().locked;
+
+const isMeUser = (u) => (u.uid || u.id) === backend.uid;
+
+// 一个小人（名牌 + 悬停提示）· one character with name tag and hover tip
+// pose: 'stand' | 'seat'（桌子后面）| 'ground'（坐地上 / on the grass）
+function makeAvatar(u, pose = 'stand') {
+  const t = T();
+  const seated = pose !== 'stand';
+  const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMeUser(u) ? ' me' : ''}${seated ? ' seated' : ''}${pose === 'ground' ? ' ground' : ''}`);
+  a.tabIndex = 0;
+  a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR, pose);
+  const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
+  a.setAttribute('aria-label', label);
+  a.appendChild(el('span', 'nm', u.name));
+  a.appendChild(el('span', 'tip', label));
+  if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
+  return a;
+}
 
 function renderTown() {
   const city = curCity();
-  const t = T();
   const box = $('places');
   box.innerHTML = '';
   const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id);
   const counts = {};
   here.forEach((u) => { counts[u.place] = (counts[u.place] || 0) + 1; });
+  const mobile = isMobile();
   city.places.forEach((p, i) => {
     const b = el('button', 'place-btn' + (p.id === state.profile.place ? ' here' : ''), `${L(p)} · ${counts[p.id] || 0}`);
     b.type = 'button';
     b.style.left = `${SLOTS[i].x / 10}%`;
-    b.style.top = `${(SLOTS[i].y + 50) / 6.4}%`;
+    // 手机上地名放在建筑上方，给人物留出下方空间 · on phones the label sits above the building
+    b.style.top = `${(SLOTS[i].y + (mobile ? -72 : 50)) / 6.4}%`;
     b.addEventListener('click', () => moveTo(p.id));
     box.appendChild(b);
   });
+  if (mobile) {
+    // 地名太长时往地图里收，不出边界 · keep long place labels inside the map
+    const m = $('map').getBoundingClientRect();
+    [...box.children].forEach((b, i) => {
+      const r = b.getBoundingClientRect();
+      const shift = Math.max(0, m.left + 2 - r.left) - Math.max(0, r.right - (m.right - 2));
+      if (shift) b.style.left = `calc(${SLOTS[i].x / 10}% + ${shift}px)`;
+    });
+  }
 
   const av = $('avatars');
   av.innerHTML = '';
@@ -257,27 +557,99 @@ function renderTown() {
     if (idx < 0) continue;
     const s = SLOTS[idx];
     users.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const spots = mobile ? mobileSpots(idx, users) : null;
     users.forEach((u, i) => {
-      // 站在建筑前面一排排开 · line up in front of the building
-      const row = Math.floor(i / 5);
-      const col = i % 5;
-      const x = s.x + (col - 2) * 46 + (row % 2) * 23;
-      const y = s.y + 165 + row * 30;
-      const isMe = (u.uid || u.id) === backend.uid;
-      const a = el('div', `avatar ${u.status === 'break' ? 'rest' : 'focus'}${isMe ? ' me' : ''}`);
-      a.tabIndex = 0;
-      a.style.left = `${Math.max(3, Math.min(97, x / 10))}%`;
-      a.style.top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
-      a.innerHTML = spriteSVG(u.avatar || DEFAULT_AVATAR);
-      const label = `${u.name}${u.bot ? ` (${t.demoBadge})` : ''} · ${u.subject} · ${u.status === 'break' ? t.rest : t.focus} · ${fmtHMS(u.focusSecs || 0)}`;
-      a.setAttribute('aria-label', label);
-      a.appendChild(el('span', 'nm', u.name));
-      a.appendChild(el('span', 'tip', label));
-      if (u.status === 'break') a.appendChild(el('span', 'zz', 'zz'));
+      let left;
+      let top;
+      if (mobile) {
+        if (i >= spots.shown) return;
+        [left, top] = spots.pos(i);
+      } else {
+        // 站在建筑前面一排排开 · line up in front of the building
+        const row = Math.floor(i / 5);
+        const col = i % 5;
+        const x = s.x + (col - 2) * 46 + (row % 2) * 23;
+        const y = s.y + 165 + row * 30;
+        left = `${Math.max(3, Math.min(97, x / 10))}%`;
+        top = `${Math.max(10, Math.min(99, y / 6.4))}%`;
+      }
+      const a = makeAvatar(u);
+      a.style.left = left;
+      a.style.top = top;
       av.appendChild(a);
     });
+    if (mobile && spots.hidden > 0) {
+      const more = el('div', 'avatar-more', `+${spots.hidden}`);
+      [more.style.left, more.style.top] = spots.morePos();
+      av.appendChild(more);
+    }
   }
 }
+
+// ---- 手机布局 · phone layout ----
+function isMobile() { return window.matchMedia('(max-width: 560px)').matches; }
+
+// 用真实的地名按钮位置算出人物可站的区域，保证不重叠
+// Work out, in pixels, where sprites can stand below a place without touching any place label.
+function mobileSpots(idx, users) {
+  const STEP_X = 19; // 精灵宽 16px + 间隔 · sprite width + gap (keep in sync with style.css)
+  const STEP_Y = 27; // 精灵高 24px + 间隔 · sprite height + gap
+  const MAX_ROWS = 2;
+  const map = $('map');
+  const W = map.clientWidth;
+  const H = map.clientHeight;
+  const mapTop = map.getBoundingClientRect().top;
+  const labels = [...$('places').children].map((b) => b.getBoundingClientRect());
+  const s = SLOTS[idx];
+  const own = labels[idx];
+  let limit = H - 2;
+  SLOTS.forEach((o, j) => {
+    if (j !== idx && o.y > s.y && Math.abs(o.x - s.x) < 300) limit = Math.min(limit, labels[j].top - mapTop - 3);
+  });
+  const ownBottom = own ? own.bottom - mapTop + 3 : 0;
+  const rows = Math.max(1, Math.min(MAX_ROWS, Math.floor((limit - ownBottom) / STEP_Y)));
+  const cx = (s.x / 1000) * W;
+  const half = Math.min(0.2 * W, cx - 2, W - cx - 2);
+  const perRow = Math.max(1, Math.floor((half * 2) / STEP_X));
+  const cap = rows * perRow;
+  // 人多时把自己排在最前 · when crowded, make sure "me" is among those shown
+  if (users.length > cap) {
+    const mi = users.findIndex((u) => (u.uid || u.id) === backend.uid);
+    if (mi > 0) users.unshift(...users.splice(mi, 1));
+  }
+  // 放不下时最后两格留给「+N」标签 · when crowded, the last two slots hold the "+N" chip
+  const reserve = perRow >= 2 ? 2 : 1;
+  const shown = users.length > cap ? cap - reserve : users.length;
+  const slots = Math.min(cap, users.length);
+  const px = (i) => {
+    const row = Math.floor(i / perRow);
+    const inRow = Math.min(perRow, slots - row * perRow);
+    const col = i % perRow;
+    const x = cx + (col - (inRow - 1) / 2) * STEP_X;
+    const y = limit - (rows - 1 - row) * STEP_Y; // 第 0 行在后 · row 0 at the back, last row at the front
+    return [x, y];
+  };
+  const pct = ([x, y]) => [`${(x / W) * 100}%`, `${(y / H) * 100}%`];
+  return {
+    shown,
+    hidden: users.length - shown,
+    pos: (i) => pct(px(i)),
+    morePos: () => {
+      const [x1, y] = px(shown);
+      const [x2] = px(shown + reserve - 1);
+      return pct([(x1 + x2) / 2, y]);
+    },
+  };
+}
+
+let lastMapW = 0;
+window.addEventListener('resize', () => {
+  const w = $('map').clientWidth;
+  if (!state.inTown || state.view === 'world' || w === lastMapW) return;
+  lastMapW = w;
+  clearTimeout(window.__townResize);
+  window.__townResize = setTimeout(renderView, 150);
+});
 
 function renderUnlock() {
   const box = $('unlock');
@@ -363,13 +735,14 @@ async function enterTown(e) {
   if (!curCity().places.some((p) => p.id === state.profile.place)) state.profile.place = curCity().places[0].id;
   saveProfile();
   state.inTown = true;
-  state.view = 'town';
+  state.view = 'room';
+  state.profile.seat = STANDING; // 走进来先站在门口 · walk in and stand at the door first
   state.sessionSecs = 0;
   state.pendingSecs = 0;
   state.status = state.profile.pomo && !pomoNow().focus ? 'break' : 'focus';
   state.pomoPhase = pomoNow().focus;
   const p = state.profile;
-  await backend.join({ name, subject, city: p.city, place: p.place, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
+  await backend.join({ name, subject, city: p.city, place: p.place, seat: STANDING, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
   $('join').hidden = true;
   $('town').hidden = false;
   window.scrollTo(0, 0);
@@ -394,6 +767,7 @@ async function endSession(silent) {
   await backend.leave();
   $('town').hidden = true;
   $('join').hidden = false;
+  renderPicker();
   if (!silent) toast(T().ended(mins));
   renderOnline();
 }
@@ -402,18 +776,23 @@ function setStatus(s) {
   state.status = s;
   backend.update({ status: s });
   renderSession();
-  if (state.view === 'town') renderTown();
+  if (state.view !== 'world') renderView();
 }
 
+// 走进一个地点，先站在门口（换地点时）· walk into a place and stand at the door (when the place changes)
 function moveTo(placeId) {
-  if (placeId === state.profile.place) return;
-  state.profile.place = placeId;
-  saveProfile();
-  backend.update({ place: placeId });
-  toast(T().moved(L(curPlace())));
-  renderSession();
-  renderTown();
-  syncSound();
+  if (placeId !== state.profile.place) {
+    state.profile.place = placeId;
+    state.profile.seat = STANDING;
+    saveProfile();
+    backend.update({ place: placeId, seat: STANDING });
+    toast(T().moved(L(curPlace())));
+    renderSession();
+    syncSound();
+  }
+  state.view = 'room';
+  renderMap();
+  window.requestAnimationFrame(() => $('map').scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
 }
 
 function goCity(cityId) {
@@ -422,8 +801,9 @@ function goCity(cityId) {
   if (cityId !== state.profile.city) {
     state.profile.city = cityId;
     state.profile.place = c.places[0].id;
+    state.profile.seat = STANDING;
     saveProfile();
-    backend.update({ city: cityId, place: state.profile.place });
+    backend.update({ city: cityId, place: state.profile.place, seat: STANDING });
     toast(T().moved(L(c)));
   }
   state.view = 'town';
@@ -474,7 +854,10 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn || btn.disabled) return;
   const a = btn.dataset.action;
-  if (a === 'lang') { state.lang = state.lang === 'zh' ? 'en' : 'zh'; lsSet('st-lang', state.lang); applyLang(); }
+  if (a === 'lang') {
+    const next = btn.dataset.lang;
+    if (next && next !== state.lang) { state.lang = next; lsSet('st-lang', state.lang); applyLang(); }
+  }
   else if (a === 'pomo') {
     state.profile.pomo = !state.profile.pomo;
     saveProfile();
@@ -486,6 +869,8 @@ document.addEventListener('click', (e) => {
   else if (a === 'tab-today') { state.tab = 'today'; renderBoard(); }
   else if (a === 'tab-week') { state.tab = 'week'; renderBoard(); }
   else if (a === 'world') { state.view = 'world'; renderMap(); renderUnlock(); }
+  else if (a === 'auto-seat') autoSeat();
+  else if (a === 'town') { state.view = 'town'; renderMap(); }
   else if (a === 'sound') { state.sound = !state.sound; lsSet('st-sound', state.sound); syncSound(); }
   else if (a === 'close-unlock') { state.unlockTarget = null; renderUnlock(); }
   else if (a === 'buy' && state.unlockTarget) unlock(state.unlockTarget, true);
@@ -544,7 +929,8 @@ window.addEventListener('pagehide', () => {
   backend.onPresence((list) => {
     state.presence = list;
     renderOnline();
-    if (state.inTown) { if (state.view === 'world') renderWorld(); else renderTown(); }
+    if (state.inTown) renderView();
+    else renderPicker();
   });
   backend.onMessages((msgs) => { state.messages = msgs; if (state.inTown) renderMessages(); });
   $('join-form').addEventListener('submit', enterTown);

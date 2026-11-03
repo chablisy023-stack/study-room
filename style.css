@@ -128,6 +128,28 @@ h2 { font-size: 18px; }
 .avatar:hover .tip, .avatar:focus .tip { opacity: 1; }
 .avatar:focus-visible .nm { outline: 3px solid #F2A65A; }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+/* 地点内部 · inside a place */
+.avatar.seated svg { height: 37px; }              /* 34 × 13/12：只画腰部以上 · waist-up */
+.avatar.me.seated svg { height: 43px; }
+.avatar.ground svg { height: 43px; }               /* 34 × 15/12：盘腿坐 · cross-legged */
+.avatar.me.ground svg { height: 50px; }
+.avatar.seated .nm { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); margin: 0; }
+.seat-btn {
+  position: absolute; transform: translate(-50%, -115%); pointer-events: auto;
+  width: 30px; height: 30px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.9);
+  background: rgba(31,42,36,0.28); color: rgba(255,255,255,0.9); opacity: 0.85; font: inherit; font-size: 18px; font-weight: 700; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
+}
+/* 站在门口 / 走路时：名牌在头顶 · standing at the door / walking: name above the head */
+.avatar.entering .nm, .avatar.walking .nm { position: absolute; top: auto; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); margin: 0; }
+.avatar.walking { transition: none; z-index: 3; }
+.avatar.walking svg { animation: walk 0.3s steps(2) infinite; }
+@keyframes walk { 50% { transform: translateY(-3px); } }
+.map.choosing .seat-btn { opacity: 1; animation: seat-pulse 1.4s ease-in-out infinite; }
+@keyframes seat-pulse { 50% { background: rgba(46, 125, 91, 0.75); } }
+@media (prefers-reduced-motion: reduce) { .avatar.walking svg, .map.choosing .seat-btn { animation: none; } }
+.seat-btn:hover, .seat-btn:focus-visible { background: var(--accent); border-style: solid; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .avatar.focus svg { animation: none; } }
 
 .map.world { aspect-ratio: 1000 / 560; }
@@ -155,6 +177,31 @@ h2 { font-size: 18px; }
 .city-pin:focus-visible { outline: none; }
 .city-pin:focus-visible .pin { outline: 3px solid #F2A65A; outline-offset: 2px; }
 
+/* 天气 · weather */
+.weather-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: #EAF0E7; font-size: 13px; font-weight: 500; white-space: nowrap; }
+.weather { position: absolute; pointer-events: none; overflow: hidden; }
+.weather::before, .weather::after { content: ''; position: absolute; inset: 0; }
+.weather.w-rain { background: rgba(40, 60, 90, 0.2); }
+.weather.w-rain::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cpath d='M12 4l-4 16M48 30l-4 16M86 8l-4 16M120 44l-4 16M30 70l-4 16M70 92l-4 16M108 78l-4 16M20 112l-4 16M60 120l-4 16M100 116l-4 16' stroke='%23FFFFFF' stroke-opacity='.7' stroke-width='2'/%3E%3C/svg%3E"); animation: rain 0.55s linear infinite; }
+.weather.w-rain::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cpath d='M20 10l-3 11M64 34l-3 11M38 60l-3 11M80 74l-3 11' stroke='%23DCEBFF' stroke-opacity='.6' stroke-width='1.5'/%3E%3C/svg%3E"); animation: rain2 0.8s linear infinite; }
+.weather.w-snow { background: rgba(225, 235, 250, 0.18); }
+.weather.w-snow::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' shape-rendering='crispEdges'%3E%3Cg fill='%23FFFFFF'%3E%3Crect x='10' y='8' width='5' height='5'/%3E%3Crect x='60' y='22' width='5' height='5'/%3E%3Crect x='100' y='50' width='5' height='5'/%3E%3Crect x='30' y='62' width='5' height='5'/%3E%3Crect x='80' y='92' width='5' height='5'/%3E%3Crect x='112' y='108' width='5' height='5'/%3E%3Crect x='48' y='112' width='5' height='5'/%3E%3C/g%3E%3C/svg%3E"); animation: snow 7s linear infinite; }
+.weather.w-snow::after { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90' shape-rendering='crispEdges'%3E%3Cg fill='%23FFFFFF' fill-opacity='.8'%3E%3Crect x='20' y='14' width='3' height='3'/%3E%3Crect x='70' y='40' width='3' height='3'/%3E%3Crect x='40' y='70' width='3' height='3'/%3E%3Crect x='6' y='52' width='3' height='3'/%3E%3C/g%3E%3C/svg%3E"); animation: snow2 5s linear infinite; }
+.weather.w-fog { background: rgba(236, 240, 242, 0.38); }
+.weather.w-fog::before, .weather.w-cloudy::before { right: auto; width: 200%; background-size: 50% 100%; animation: drift 40s linear infinite; }
+.weather.w-fog::before { background-image: radial-gradient(ellipse 30% 22% at 25% 35%, rgba(255,255,255,0.75), transparent 70%), radial-gradient(ellipse 35% 25% at 75% 70%, rgba(255,255,255,0.7), transparent 70%); }
+.weather.w-cloudy { background: rgba(70, 80, 100, 0.16); }
+.weather.w-cloudy::before { background-image: radial-gradient(ellipse 22% 18% at 20% 30%, rgba(40,50,70,0.2), transparent 70%), radial-gradient(ellipse 26% 20% at 70% 65%, rgba(40,50,70,0.18), transparent 70%); animation-duration: 70s; }
+.weather.w-sunny { background: rgba(255, 220, 120, 0.06); }
+.weather.w-sunny::before { background: radial-gradient(circle at 92% 6%, rgba(255, 236, 160, 0.55), rgba(255, 236, 160, 0) 45%); animation: glow 6s ease-in-out infinite; }
+@keyframes rain { to { background-position: -35px 140px; } }
+@keyframes rain2 { to { background-position: -24px 90px; } }
+@keyframes snow { to { background-position: 30px 120px; } }
+@keyframes snow2 { to { background-position: -15px 90px; } }
+@keyframes drift { to { transform: translateX(-50%); } }
+@keyframes glow { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .weather::before, .weather::after { animation: none; } }
+
 .coin-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 10px; background: #FDF3D8; color: #6B4405; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 .coin { width: 16px; height: 16px; border-radius: 50%; background: #E3A72F; box-shadow: inset 0 0 0 3px #F4C95D; display: inline-block; }
 .coin-pill.pop { animation: pop 0.5s ease; }
@@ -166,6 +213,8 @@ h2 { font-size: 18px; }
 .vol input { width: 96px; accent-color: var(--accent); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .map-hint { padding: 0 4px; }
+.hint-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.hint-row .map-hint { flex: 1 1 200px; }
 
 .unlock { border-color: #E8C9A8; background: #FFFBF4; display: flex; flex-direction: column; gap: 12px; }
 .unlock-body { display: flex; flex-wrap: wrap; gap: 16px; }
@@ -190,6 +239,25 @@ h2 { font-size: 18px; }
 .seg { display: inline-flex; background: #EAF0E7; border-radius: 10px; padding: 3px; }
 .seg button { min-height: 38px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
 .seg button[aria-pressed="true"] { background: #fff; font-weight: 700; }
+/* 语言切换 · language toggle */
+.lang-seg { border: 1px solid #C3CEC0; }
+.lang-seg button { min-width: 52px; }
+.lang-seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+/* 开始页地图选择 · start-page location picker */
+.picker { display: flex; flex-direction: column; gap: 10px; }
+.picker .map.mini { border-radius: 10px; }
+.map.mini .city-pin .lbl { font-size: 11px; padding: 1px 7px; border-width: 1.5px; }
+.map.mini .city-pin .pin { width: 18px; height: 18px; border-width: 2px; }
+.map.mini .city-pin.here .pin { width: 22px; height: 22px; }
+.map.mini .city-pin.here .lbl { background: var(--accent); }
+.map.mini .city-pin.lbl-bottom { transform: translate(-50%, -9px); }
+.map.mini .city-pin.lbl-top { transform: translate(-50%, calc(-100% + 9px)); }
+.map.mini .city-pin.lbl-left { transform: translate(calc(-100% + 9px), -50%); }
+.pick-label { font-weight: 500; }
+.picker .swatches .sw.txt { height: auto; min-height: 36px; }
+.picker .swatches .sw.txt[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--accent); font-weight: 700; }
+.pick-where { color: var(--accent); font-weight: 700; }
 .board { list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .board li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; }
 .board li.me { background: var(--accent-soft); font-weight: 700; }
@@ -218,11 +286,41 @@ h2 { font-size: 18px; }
 }
 
 @media (max-width: 560px) {
-  .avatar svg { width: 22px; height: 33px; }
-  .avatar.me svg { width: 26px; height: 39px; }
-  .avatar .nm { font-size: 9px; max-width: 54px; }
+  /* 手机：小精灵、不显示名牌（点按看提示），自己用橙色描边 · phones: compact sprites, names via tooltip */
+  .avatar { width: 16px; }
+  .avatar svg, .avatar.me svg { width: 16px; height: 24px; }
+  .avatar.me svg {
+    filter: drop-shadow(1px 0 0 var(--warm)) drop-shadow(-1px 0 0 var(--warm))
+            drop-shadow(0 1px 0 var(--warm)) drop-shadow(0 -1px 0 var(--warm));
+  }
+  .avatar .nm { display: none; }
+  .avatar.seated svg, .avatar.me.seated svg { height: 17px; }
+  .avatar.ground svg, .avatar.me.ground svg { height: 20px; }
+  .seat-btn { width: 18px; height: 18px; font-size: 12px; border-width: 1.5px; }
+  .avatar .zz { top: -4px; right: -8px; font-size: 8px; line-height: 1.2; padding: 0 2px; border-radius: 4px; }
+  .avatar .tip { font-size: 11px; padding: 4px 8px; }
+  .avatar-more {
+    position: absolute; transform: translate(-50%, -100%); height: 18px; min-width: 18px; max-width: 36px; padding: 0 4px;
+    border-radius: 9px; background: rgba(31,42,36,0.82); color: #fff; font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; margin-top: -3px; pointer-events: none;
+  }
+  /* 地名在建筑上方 · place label sits above the building */
+  .place-btn {
+    transform: translate(-50%, -100%); font-size: 10px; min-height: 24px; padding: 1px 7px; border-width: 1.5px;
+    max-width: calc(50% - 6px); overflow: hidden; text-overflow: ellipsis;
+  }
   .city-pin .lbl { font-size: 10px; padding: 1px 6px; }
   .city-pin .pin { width: 16px; height: 16px; border-width: 2px; }
-  .place-btn { font-size: 11px; min-height: 30px; padding: 2px 8px; }
   .layout { padding: 12px; }
+  .join-card { padding: 18px; }
+  .lang-seg button { min-width: 0; padding: 0 9px; }
+  .map.mini .city-pin .lbl { font-size: 9px; line-height: 1.3; padding: 0 5px; }
+  .map.mini .city-pin .pin { width: 14px; height: 14px; }
+  .map.mini .city-pin.here .pin { width: 17px; height: 17px; }
+  .map.mini .city-pin.lbl-bottom { transform: translate(-50%, -7px); }
+  .map.mini .city-pin.lbl-top { transform: translate(-50%, calc(-100% + 7px)); }
+  .map.mini .city-pin.lbl-left { transform: translate(calc(-100% + 7px), -50%); }
+}
+@media (max-width: 380px) {
+  .place-btn { font-size: 9px; padding: 1px 5px; }
 }

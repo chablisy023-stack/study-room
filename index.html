@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>自习小镇 Study Town</title>
-<meta name="description" content="线上自习世界：在地图上和大家一起学习，攒金币解锁新城市 · Study together on a world map">
+<title>自习室 Study Room</title>
+<meta name="description" content="线上自习室：在地图上和大家一起学习，攒金币解锁新城市 · Study together on a world map">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -15,7 +15,10 @@
 <!-- ============ 进入页 Join ============ -->
 <section id="join" class="screen">
   <div class="join-top">
-    <button type="button" class="btn ghost lang-btn" data-action="lang"></button>
+    <div class="seg lang-seg" role="group" data-i18n-aria="langGroup">
+      <button type="button" data-action="lang" data-lang="zh" lang="zh">中文</button>
+      <button type="button" data-action="lang" data-lang="en" lang="en">EN</button>
+    </div>
   </div>
   <div class="join-wrap">
     <div class="join-intro">
@@ -32,6 +35,16 @@
       <label class="field"><span data-i18n="subj"></span>
         <input id="f-subj" maxlength="30" required data-i18n-ph="subjPh">
       </label>
+      <fieldset class="builder picker">
+        <legend data-i18n="pickTitle"></legend>
+        <p class="muted small" data-i18n="pickHint"></p>
+        <div class="map world mini" id="pick-map">
+          <svg viewBox="0 0 1000 560" class="map-svg" id="pick-svg" aria-hidden="true"></svg>
+          <div class="places" id="pick-cities"></div>
+        </div>
+        <p class="small pick-label" id="pick-places-label"></p>
+        <div class="swatches" id="pick-places" role="group"></div>
+      </fieldset>
       <fieldset class="builder">
         <legend data-i18n="look"></legend>
         <div class="builder-row">
@@ -45,6 +58,7 @@
         </div>
       </fieldset>
       <label class="check"><input type="checkbox" id="f-pomo"><span data-i18n="pomoOpt"></span></label>
+      <p class="small pick-where" id="pick-where"></p>
       <button type="submit" class="btn primary big" data-i18n="enter"></button>
       <p class="muted small" data-i18n="note"></p>
     </form>
@@ -63,7 +77,10 @@
     <div class="top-actions">
       <span class="coin-pill" id="coin-pill"><span class="coin" aria-hidden="true"></span><span id="coin-count">0</span></span>
       <button type="button" class="btn ghost" id="pomo-toggle" data-action="pomo" aria-pressed="false"></button>
-      <button type="button" class="btn ghost lang-btn" data-action="lang"></button>
+      <div class="seg lang-seg" role="group" data-i18n-aria="langGroup">
+        <button type="button" data-action="lang" data-lang="zh" lang="zh">中文</button>
+        <button type="button" data-action="lang" data-lang="en" lang="en">EN</button>
+      </div>
       <button type="button" class="btn ghost" data-action="leave" data-i18n="leave"></button>
     </div>
   </header>
@@ -97,15 +114,20 @@
           <div class="crumbs">
             <button type="button" class="btn ghost small-btn" data-action="world" id="world-btn"></button>
             <h2 id="map-title"></h2>
+            <span class="weather-chip" id="weather-chip" hidden></span>
           </div>
           <div class="sound-ctl">
             <button type="button" class="btn ghost small-btn" data-action="sound" id="sound-btn" aria-pressed="false"></button>
             <label class="vol"><span class="sr" data-i18n="volume"></span><input type="range" id="vol" min="0" max="100" value="50"></label>
           </div>
         </div>
-        <p class="muted small map-hint" id="map-hint"></p>
+        <div class="hint-row">
+          <p class="muted small map-hint" id="map-hint"></p>
+          <button type="button" class="btn ghost small-btn" data-action="auto-seat" id="auto-seat-btn" hidden data-i18n="autoSeat"></button>
+        </div>
         <div class="map" id="map">
           <svg viewBox="0 0 1000 640" class="map-svg" id="map-svg" role="img" data-i18n-aria="mapAria"></svg>
+          <div class="weather" id="weather" aria-hidden="true" hidden></div>
           <div class="places" id="places"></div>
           <div class="avatars" id="avatars"></div>
         </div>
