@@ -114,6 +114,7 @@
           <div class="crumbs">
             <button type="button" class="btn ghost small-btn" data-action="world" id="world-btn"></button>
             <h2 id="map-title"></h2>
+            <span class="weather-chip" id="weather-chip" hidden></span>
           </div>
           <div class="sound-ctl">
             <button type="button" class="btn ghost small-btn" data-action="sound" id="sound-btn" aria-pressed="false"></button>
@@ -123,6 +124,7 @@
         <p class="muted small map-hint" id="map-hint"></p>
         <div class="map" id="map">
           <svg viewBox="0 0 1000 640" class="map-svg" id="map-svg" role="img" data-i18n-aria="mapAria"></svg>
+          <div class="weather" id="weather" aria-hidden="true" hidden></div>
           <div class="places" id="places"></div>
           <div class="avatars" id="avatars"></div>
         </div>

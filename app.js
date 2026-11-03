@@ -1,7 +1,8 @@
 import { STR } from './i18n.js';
 import { createBackend, dayKey } from './backend.js';
 import { CITIES, SLOTS, SOUND_OF, cityById, worldSVG, townSVG } from './cities.js';
-import { interiorSVG, seatsOf } from './interiors.js';
+import { interiorSVG, seatsOf, weatherArea } from './interiors.js';
+import { weatherFor, WEATHERS, WEATHER_ICON } from './weather.js';
 import { SKINS, HAIRS, STYLES, SHIRTS, DEFAULT_AVATAR, spriteSVG } from './avatar.js';
 import { playAmbient, stopAmbient, setVolume } from './sound.js';
 
@@ -39,6 +40,7 @@ const state = {
   sound: lsGet('st-sound', false),
   vol: lsGet('st-vol', 50),
   unlockTarget: null,
+  weatherKey: null,
 };
 if (!state.unlocked.includes(state.profile.city)) state.profile.city = 'linkoping';
 let backend = null;
@@ -86,10 +88,48 @@ function streak() {
 }
 
 /* ---------------- sound ---------------- */
+/* ---------------- 天气 · weather ---------------- */
+// 网址加 ?weather=rain 等可固定天气，方便预览 · add ?weather=rain (etc.) to the URL to preview a weather
+const FORCED_WEATHER = (() => { try { const w = new URLSearchParams(location.search).get('weather'); return WEATHERS.includes(w) ? w : null; } catch { return null; } })();
+const curWeather = () => FORCED_WEATHER || weatherFor(curCity().id);
+const OUTDOOR = new Set(['park', 'lake', 'beach', 'temple']);
+
+function renderWeather() {
+  const box = $('weather');
+  const chip = $('weather-chip');
+  if (state.view === 'world') { box.hidden = true; chip.hidden = true; return; }
+  const t = T();
+  const w = curWeather();
+  chip.hidden = false;
+  chip.textContent = `${WEATHER_ICON[w]} ${t.weather[w]}`;
+  chip.setAttribute('aria-label', t.weatherAria(L(curCity()), t.weather[w]));
+  chip.title = t.weatherAria(L(curCity()), t.weather[w]);
+  // 城市地图：整个画面；地点内部：户外整个画面，室内只在窗户里 · city: everywhere; inside: outdoors everywhere, indoors only the windows
+  const area = state.view === 'room' ? weatherArea(curPlace().kind, `${curCity().id}/${curPlace().id}`) : { x: 0, y: 0, w: 1000, h: 640 };
+  box.hidden = !area;
+  if (!area) return;
+  box.className = `weather w-${w}`;
+  box.style.left = `${area.x / 10}%`;
+  box.style.top = `${area.y / 6.4}%`;
+  box.style.width = `${area.w / 10}%`;
+  box.style.height = `${area.h / 6.4}%`;
+}
+
+// 每 20 秒看看天气有没有变 · check every 20 s whether the weather changed
+setInterval(() => {
+  if (!state.inTown) return;
+  const key = `${curCity().id}:${curWeather()}`;
+  if (state.weatherKey && key !== state.weatherKey && key.split(':')[0] === state.weatherKey.split(':')[0]) {
+    toast(T().weatherChanged(L(curCity()), T().weather[curWeather()]));
+  }
+  if (key !== state.weatherKey) { state.weatherKey = key; renderWeather(); syncSound(); }
+}, 20000);
+
 function syncSound() {
   const b = $('sound-btn');
   const t = T();
-  const kind = SOUND_OF[curPlace().kind];
+  // 在户外又碰上下雨，就换成雨声 · outdoors in the rain, play the rain sound
+  const kind = OUTDOOR.has(curPlace().kind) && curWeather() === 'rain' ? 'rain' : SOUND_OF[curPlace().kind];
   b.textContent = state.sound ? `${t.soundOn} · ${t.soundNames[kind]}` : t.soundOff;
   b.setAttribute('aria-pressed', state.sound ? 'true' : 'false');
   $('vol').value = state.vol;
@@ -206,6 +246,8 @@ function renderMap() {
   back.textContent = `← ${view === 'room' ? L(curCity()) : t.world}`;
   $('map-title').textContent = world ? t.world : view === 'room' ? L(curPlace()) : L(curCity());
   $('map-hint').textContent = world ? t.worldHint : view === 'room' ? t.roomHint : t.townHint;
+  state.weatherKey = `${curCity().id}:${curWeather()}`;
+  renderWeather();
   renderView();
 }
 function renderView() {

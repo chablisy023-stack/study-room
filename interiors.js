@@ -351,3 +351,15 @@ export function interiorSVG(kind, name, key) {
   const art = sc.items ? sc.bg() + sc.items().map((it) => it.svg).join('') + sc.sign(name) : sc.art(name);
   return `<g ${P}>${art}</g>`;
 }
+
+// 能看到天气的区域（画布坐标）：户外整个画面；室内只有窗户；没有窗户就看不到
+// Where the weather shows (canvas units): whole scene outdoors, only the windows indoors, nowhere if there are none.
+const FULL = { x: 0, y: 0, w: 1000, h: 640 };
+const WEATHER_AREA = {
+  park: FULL, lake: FULL, beach: FULL, temple: FULL,
+  tower: { x: 30, y: 20, w: 940, h: 210 },
+  'linkoping/lib': { x: 0, y: 0, w: 1000, h: 250 },
+};
+export function weatherArea(kind, key) {
+  return WEATHER_AREA[key] || (SPECIAL[key] ? null : WEATHER_AREA[kind]) || null;
+}
