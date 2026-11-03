@@ -121,7 +121,10 @@
             <label class="vol"><span class="sr" data-i18n="volume"></span><input type="range" id="vol" min="0" max="100" value="50"></label>
           </div>
         </div>
-        <p class="muted small map-hint" id="map-hint"></p>
+        <div class="hint-row">
+          <p class="muted small map-hint" id="map-hint"></p>
+          <button type="button" class="btn ghost small-btn" data-action="auto-seat" id="auto-seat-btn" hidden data-i18n="autoSeat"></button>
+        </div>
         <div class="map" id="map">
           <svg viewBox="0 0 1000 640" class="map-svg" id="map-svg" role="img" data-i18n-aria="mapAria"></svg>
           <div class="weather" id="weather" aria-hidden="true" hidden></div>

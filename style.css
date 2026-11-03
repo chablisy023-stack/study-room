@@ -141,6 +141,14 @@ h2 { font-size: 18px; }
   background: rgba(31,42,36,0.28); color: rgba(255,255,255,0.9); opacity: 0.85; font: inherit; font-size: 18px; font-weight: 700; line-height: 1;
   cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0;
 }
+/* 站在门口 / 走路时：名牌在头顶 · standing at the door / walking: name above the head */
+.avatar.entering .nm, .avatar.walking .nm { position: absolute; top: auto; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); margin: 0; }
+.avatar.walking { transition: none; z-index: 3; }
+.avatar.walking svg { animation: walk 0.3s steps(2) infinite; }
+@keyframes walk { 50% { transform: translateY(-3px); } }
+.map.choosing .seat-btn { opacity: 1; animation: seat-pulse 1.4s ease-in-out infinite; }
+@keyframes seat-pulse { 50% { background: rgba(46, 125, 91, 0.75); } }
+@media (prefers-reduced-motion: reduce) { .avatar.walking svg, .map.choosing .seat-btn { animation: none; } }
 .seat-btn:hover, .seat-btn:focus-visible { background: var(--accent); border-style: solid; opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .avatar.focus svg { animation: none; } }
 
@@ -205,6 +213,8 @@ h2 { font-size: 18px; }
 .vol input { width: 96px; accent-color: var(--accent); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .map-hint { padding: 0 4px; }
+.hint-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.hint-row .map-hint { flex: 1 1 200px; }
 
 .unlock { border-color: #E8C9A8; background: #FFFBF4; display: flex; flex-direction: column; gap: 12px; }
 .unlock-body { display: flex; flex-wrap: wrap; gap: 16px; }

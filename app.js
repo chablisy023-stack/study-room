@@ -41,6 +41,7 @@ const state = {
   vol: lsGet('st-vol', 50),
   unlockTarget: null,
   weatherKey: null,
+  walking: null,
 };
 if (!state.unlocked.includes(state.profile.city)) state.profile.city = 'linkoping';
 let backend = null;
@@ -237,6 +238,8 @@ function renderMap() {
   const map = $('map');
   map.classList.toggle('world', world);
   map.classList.toggle('room', view === 'room');
+  stopWalking();
+  $('auto-seat-btn').hidden = view !== 'room';
   const svg = $('map-svg');
   svg.setAttribute('viewBox', world ? '0 0 1000 560' : '0 0 1000 640');
   svg.innerHTML = world ? worldSVG() : view === 'room' ? interiorSVG(curPlace().kind, L(curPlace()), `${curCity().id}/${curPlace().id}`) : townSVG(curCity());
@@ -259,16 +262,24 @@ function renderView() {
 /* ---------------- 地点内部：座位 · inside a place: seats ---------------- */
 const seatPref = (id, n) => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % n; };
 
-// 选了座位的人先坐；其他人从各自偏好的位置往后找空位 · chosen seats first, then everyone else from a stable preferred seat
+// seat = -1：刚走进来、站在门口还没选座位 · just walked in, standing at the door
+const STANDING = -1;
+const ENTRANCE = { x: 500, y: 634 };
+
+// 选了座位的人先坐；站在门口的人留在门口；其他人从各自偏好的位置往后找空位
+// chosen seats first; people at the door stay there; everyone else from a stable preferred seat
 function assignSeats(users, n) {
   const seat = new Array(n).fill(null);
   const rest = [];
+  const entering = [];
   const sorted = [...users].sort((a, b) => (isMeUser(b) - isMeUser(a)) || String(a.id).localeCompare(String(b.id)));
   sorted.forEach((u) => {
     const s = u.seat;
-    if (Number.isInteger(s) && s >= 0 && s < n && !seat[s]) seat[s] = u; else rest.push(u);
+    if (s === STANDING) entering.push(u);
+    else if (Number.isInteger(s) && s >= 0 && s < n && !seat[s]) seat[s] = u;
+    else rest.push(u);
   });
-  const standing = [];
+  const standing = entering;
   rest.forEach((u) => {
     const start = seatPref(u.id, n);
     let k = 0;
@@ -278,25 +289,31 @@ function assignSeats(users, n) {
   return { seat, standing };
 }
 
+const pct = (p) => [`${p.x / 10}%`, `${p.y / 6.4}%`];
+const roomSeats = () => seatsOf(curPlace().kind, `${curCity().id}/${curPlace().id}`);
+
 function renderRoom() {
   const t = T();
   const city = curCity();
   const place = curPlace();
   $('places').innerHTML = '';
   const av = $('avatars');
-  av.innerHTML = '';
+  // 正在走路的自己保留在原处，不打断动画 · keep my walking sprite in place so its animation isn't interrupted
+  const walkingEl = state.walking ? state.walking.el : null;
+  [...av.children].forEach((c) => { if (c !== walkingEl) c.remove(); });
+  const frag = document.createDocumentFragment();
   const seats = seatsOf(place.kind, `${city.id}/${place.id}`);
   const here = state.presence.filter((u) => (u.city || 'linkoping') === city.id && u.place === place.id);
   const { seat, standing } = assignSeats(here, seats.length);
   seats.forEach((s, i) => {
-    const left = `${s.x / 10}%`;
-    const top = `${s.y / 6.4}%`;
+    const [left, top] = pct(s);
     const u = seat[i];
+    if (u && walkingEl && isMeUser(u)) return; // 我正走向这个座位 · I'm on my way to this seat
     if (u) {
       const a = makeAvatar(u, s.pose);
       a.style.left = left;
       a.style.top = top;
-      av.appendChild(a);
+      frag.appendChild(a);
     } else {
       const b = el('button', 'seat-btn', '+');
       b.type = 'button';
@@ -304,20 +321,100 @@ function renderRoom() {
       b.style.top = top;
       b.setAttribute('aria-label', t.sitHere(i + 1));
       b.title = t.sitHere(i + 1);
-      b.addEventListener('click', () => sit(i));
-      av.appendChild(b);
+      b.addEventListener('click', () => walkTo(i));
+      frag.appendChild(b);
     }
   });
-  // 座位满了：人数写在提示行里，不盖住座位 · room full: say so in the hint line instead of covering seats
-  $('map-hint').textContent = t.roomHint + (standing.length ? ` · ${t.standing(standing.length)}` : '');
+  // 门口站着的人（自己排最前），站在不挡座位的位置，最多 5 个 · people at the door (me first), on spots clear of seats, up to 5
+  const spots = doorSpots(seats);
+  standing.filter((u) => !(walkingEl && isMeUser(u))).slice(0, spots.length).forEach((u, k) => {
+    const a = makeAvatar(u, 'stand');
+    a.classList.add('entering');
+    [a.style.left, a.style.top] = pct(spots[k]);
+    frag.appendChild(a);
+  });
+  av.insertBefore(frag, walkingEl);
+  state.freeSeats = seat.map((u, i) => (u ? -1 : i)).filter((i) => i >= 0);
+  $('auto-seat-btn').hidden = !state.freeSeats.length;
+  const meStanding = state.profile.seat === STANDING && !walkingEl;
+  $('map').classList.toggle('choosing', meStanding);
+  const others = standing.filter((u) => !isMeUser(u)).length;
+  // 座位满了：人数写在提示行里 · how many are still looking goes in the hint line
+  $('map-hint').textContent = (meStanding ? t.pickSeat : t.roomHint) + (others ? ` · ${t.standing(others)}` : '');
 }
 
-function sit(i) {
+// 门口能站的位置：从正中往两边找，离座位太近的跳过 · door spots: from the middle outwards, skipping any too close to a seat
+function doorSpots(seats) {
+  const out = [];
+  for (let d = 0; d <= 440 && out.length < 5; d += 56) {
+    for (const x of d ? [ENTRANCE.x - d, ENTRANCE.x + d] : [ENTRANCE.x]) {
+      if (out.length < 5 && !seats.some((s) => Math.abs(s.x - x) < 80 && ENTRANCE.y - s.y < 100)) out.push({ x, y: ENTRANCE.y });
+    }
+  }
+  return out.length ? out : [ENTRANCE];
+}
+
+// 走到座位再坐下：门口/旧座位 → 前面的过道 → 横着走 → 坐下
+// Walk to a seat and sit: door/old seat → the lane in front → across → sit down
+function walkTo(i) {
+  const target = roomSeats()[i];
+  if (!target) return;
+  const av = $('avatars');
+  const start = myPosition();
+  const cur = av.querySelector('.avatar.me');
+  stopWalking();
+  const me = state.presence.find(isMeUser) || { ...state.profile, id: 'me', uid: backend.uid, status: state.status };
+  const el2 = makeAvatar(me, 'stand');
+  el2.classList.add('walking');
+  if (cur) cur.remove();
+  av.appendChild(el2);
+  const laneFrom = Math.min(start.y + (start.y < ENTRANCE.y - 20 ? 80 : 0), 630);
+  const laneTo = Math.min(target.y + 80, 630);
+  const pts = [start, { x: start.x, y: laneFrom }, { x: target.x, y: laneFrom }, { x: target.x, y: laneTo }, { x: target.x, y: target.y }]
+    .filter((p, k, a) => k === 0 || Math.hypot(p.x - a[k - 1].x, p.y - a[k - 1].y) > 1);
+  const segs = pts.slice(1).map((p, k) => Math.hypot(p.x - pts[k].x, p.y - pts[k].y));
+  const total = segs.reduce((x, y) => x + y, 0) || 1;
+  let acc = 0;
+  const frames = pts.map((p, k) => { if (k) acc += segs[k - 1]; const [left, top] = pct(p); return { left, top, offset: acc / total }; });
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduce ? 0 : Math.max(400, Math.min(3000, (total / 340) * 1000));
+  [el2.style.left, el2.style.top] = pct(pts[pts.length - 1]);
+  const anim = el2.animate(frames, { duration, easing: 'linear' });
+  state.walking = { el: el2, anim };
+  // 先告诉大家我选了这个座位，免得被别人占 · claim the seat right away so nobody else takes it
   state.profile.seat = i;
   saveProfile();
   backend.update({ seat: i });
-  toast(T().seated(i + 1));
-  renderRoom();
+  anim.onfinish = () => {
+    if (!state.walking || state.walking.anim !== anim) return;
+    state.walking = null;
+    el2.remove();
+    toast(T().seated(i + 1));
+    renderRoom();
+  };
+}
+// 自动分配：离我最近的空座位 · walk to the free seat closest to where I am now
+function autoSeat() {
+  const free = state.freeSeats || [];
+  if (!free.length) { toast(T().noSeat); return; }
+  const seats = roomSeats();
+  const here = myPosition();
+  const best = free.reduce((a, b) => (Math.hypot(seats[b].x - here.x, seats[b].y - here.y) < Math.hypot(seats[a].x - here.x, seats[a].y - here.y) ? b : a));
+  walkTo(best);
+}
+// 我现在在画布上的位置（脚下）· where I am now on the canvas (at my feet)
+function myPosition() {
+  const cur = $('avatars').querySelector('.avatar.me');
+  if (!cur) return ENTRANCE;
+  const mr = $('map').getBoundingClientRect();
+  const r = cur.querySelector('svg').getBoundingClientRect();
+  return { x: ((r.left + r.width / 2 - mr.left) / mr.width) * 1000, y: ((r.bottom - mr.top) / mr.height) * 640 };
+}
+function stopWalking() {
+  if (!state.walking) return;
+  state.walking.anim.cancel();
+  state.walking.el.remove();
+  state.walking = null;
 }
 
 
@@ -640,12 +737,13 @@ async function enterTown(e) {
   saveProfile();
   state.inTown = true;
   state.view = 'room';
+  state.profile.seat = STANDING; // 走进来先站在门口 · walk in and stand at the door first
   state.sessionSecs = 0;
   state.pendingSecs = 0;
   state.status = state.profile.pomo && !pomoNow().focus ? 'break' : 'focus';
   state.pomoPhase = pomoNow().focus;
   const p = state.profile;
-  await backend.join({ name, subject, city: p.city, place: p.place, seat: Number.isInteger(p.seat) ? p.seat : null, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
+  await backend.join({ name, subject, city: p.city, place: p.place, seat: STANDING, avatar: p.avatar, status: state.status, focusSecs: 0, startedAt: Date.now() });
   $('join').hidden = true;
   $('town').hidden = false;
   window.scrollTo(0, 0);
@@ -682,13 +780,13 @@ function setStatus(s) {
   if (state.view !== 'world') renderView();
 }
 
-// 走进一个地点（换地点时座位清空）· walk into a place (seat resets when the place changes)
+// 走进一个地点，先站在门口（换地点时）· walk into a place and stand at the door (when the place changes)
 function moveTo(placeId) {
   if (placeId !== state.profile.place) {
     state.profile.place = placeId;
-    state.profile.seat = null;
+    state.profile.seat = STANDING;
     saveProfile();
-    backend.update({ place: placeId, seat: null });
+    backend.update({ place: placeId, seat: STANDING });
     toast(T().moved(L(curPlace())));
     renderSession();
     syncSound();
@@ -704,9 +802,9 @@ function goCity(cityId) {
   if (cityId !== state.profile.city) {
     state.profile.city = cityId;
     state.profile.place = c.places[0].id;
-    state.profile.seat = null;
+    state.profile.seat = STANDING;
     saveProfile();
-    backend.update({ city: cityId, place: state.profile.place, seat: null });
+    backend.update({ city: cityId, place: state.profile.place, seat: STANDING });
     toast(T().moved(L(c)));
   }
   state.view = 'town';
@@ -772,6 +870,7 @@ document.addEventListener('click', (e) => {
   else if (a === 'tab-today') { state.tab = 'today'; renderBoard(); }
   else if (a === 'tab-week') { state.tab = 'week'; renderBoard(); }
   else if (a === 'world') { state.view = 'world'; renderMap(); renderUnlock(); }
+  else if (a === 'auto-seat') autoSeat();
   else if (a === 'town') { state.view = 'town'; renderMap(); }
   else if (a === 'sound') { state.sound = !state.sound; lsSet('st-sound', state.sound); syncSound(); }
   else if (a === 'close-unlock') { state.unlockTarget = null; renderUnlock(); }
