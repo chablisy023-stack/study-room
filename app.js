@@ -1,7 +1,7 @@
 import { STR } from './i18n.js';
 import { createBackend, dayKey } from './backend.js';
 import { CITIES, SLOTS, SOUND_OF, cityById, worldSVG, townSVG } from './cities.js';
-import { interiorSVG, seatsOf, weatherArea } from './interiors.js';
+import { interiorSVG, seatsOf, weatherArea, walkPath } from './interiors.js';
 import { weatherFor, WEATHERS, WEATHER_ICON } from './weather.js';
 import { SKINS, HAIRS, STYLES, SHIRTS, DEFAULT_AVATAR, spriteSVG } from './avatar.js';
 import { playAmbient, stopAmbient, setVolume } from './sound.js';
@@ -354,30 +354,29 @@ function doorSpots(seats) {
   return out.length ? out : [ENTRANCE];
 }
 
-// 走到座位再坐下：门口/旧座位 → 前面的过道 → 横着走 → 坐下
-// Walk to a seat and sit: door/old seat → the lane in front → across → sit down
+// 走到座位再坐下：从门口或旧座位出发，沿过道绕开桌子，走到座位旁边再坐下
+// Walk to a seat and sit: from the door or old seat, along the aisles around the furniture, then sit
 function walkTo(i) {
   const target = roomSeats()[i];
   if (!target) return;
   const av = $('avatars');
   const start = myPosition();
   const cur = av.querySelector('.avatar.me');
+  // 正坐着就先从原座位站起来；走到一半改主意就从当前位置出发 · seated: stand up from that seat; mid-walk: start from here
+  const fromSeat = cur && cur.classList.contains('seated') && state.profile.seat >= 0 ? state.profile.seat : null;
   stopWalking();
   const me = state.presence.find(isMeUser) || { ...state.profile, id: 'me', uid: backend.uid, status: state.status };
   const el2 = makeAvatar(me, 'stand');
   el2.classList.add('walking');
   if (cur) cur.remove();
   av.appendChild(el2);
-  const laneFrom = Math.min(start.y + (start.y < ENTRANCE.y - 20 ? 80 : 0), 630);
-  const laneTo = Math.min(target.y + 80, 630);
-  const pts = [start, { x: start.x, y: laneFrom }, { x: target.x, y: laneFrom }, { x: target.x, y: laneTo }, { x: target.x, y: target.y }]
-    .filter((p, k, a) => k === 0 || Math.hypot(p.x - a[k - 1].x, p.y - a[k - 1].y) > 1);
+  const pts = walkPath(curPlace().kind, `${curCity().id}/${curPlace().id}`, start, i, fromSeat);
   const segs = pts.slice(1).map((p, k) => Math.hypot(p.x - pts[k].x, p.y - pts[k].y));
   const total = segs.reduce((x, y) => x + y, 0) || 1;
   let acc = 0;
   const frames = pts.map((p, k) => { if (k) acc += segs[k - 1]; const [left, top] = pct(p); return { left, top, offset: acc / total }; });
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const duration = reduce ? 0 : Math.max(400, Math.min(3000, (total / 340) * 1000));
+  const duration = reduce ? 0 : Math.max(400, Math.min(4500, (total / 340) * 1000));
   [el2.style.left, el2.style.top] = pct(pts[pts.length - 1]);
   const anim = el2.animate(frames, { duration, easing: 'linear' });
   state.walking = { el: el2, anim };

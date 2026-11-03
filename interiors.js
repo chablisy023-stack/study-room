@@ -16,7 +16,10 @@ function sign(text, y = 14, bg = '#5E3523', fg = '#FBF2E6') {
 /* ---------- 家具：每件返回 {svg, seats} · furniture: each piece returns its art and its seats ---------- */
 // pose: 'seat' = 坐在桌子/椅子后面（只露上半身）· waist-up behind a desk
 //       'ground' = 盘腿坐在地上/草地上 · cross-legged on the floor or grass
-const seat = (x, y, pose = 'seat') => ({ x, y, pose });
+// from: 从哪边走到座位 'n' = 从桌子后面（上方过道）, 's' = 从前面（下方）· which side you reach the seat from
+const seat = (x, y, pose = 'seat', from = 'n') => ({ x, y, pose, from });
+// 家具占的地面（画布坐标），走路要绕开 · floor area a piece occupies; walking goes around it
+const box = (x, y, w, h) => ({ x, y, w, h });
 const chairOf = (c, top) => (x, y) => R(x - 20, y - 46, 40, 50, c) + R(x - 23, y - 52, 46, 9, top);
 const stoolOf = (c) => (x, y) => R(x - 16, y - 10, 32, 12, c) + R(x - 3, y + 2, 6, 40, c);
 const between = (xs) => xs.slice(1).map((x, i) => (x + xs[i]) / 2);
@@ -29,7 +32,7 @@ function longTable(xs, y, st) {
   svg += R(x0 + 14, y + 30, 10, st.legH || 40, st.leg) + R(x0 + w - 24, y + 30, 10, st.legH || 40, st.leg);
   svg += R(x0, y, w, 22, st.top) + R(x0, y + 22, w, 10, st.apron);
   if (st.deco) svg += between(xs).map((gx) => st.deco(gx, y)).join('');
-  return { svg, seats: xs.map((x) => seat(x, y)) };
+  return { svg, seats: xs.map((x) => seat(x, y)), blocks: [box(x0, y - 52, w, 32 + (st.legH || 40) + 52)] };
 }
 // 圆桌，两人 · round table for two (single pedestal)
 function roundTable(cx, y, st) {
@@ -38,14 +41,15 @@ function roundTable(cx, y, st) {
   svg += R(cx - 6, y + 26, 12, 34, st.leg) + R(cx - 26, y + 58, 52, 6, st.leg);
   svg += R(cx - 62, y + 2, 124, 20, st.top) + R(cx - 72, y + 6, 144, 12, st.top) + R(cx - 62, y + 22, 124, 6, st.apron);
   if (st.deco) svg += st.deco(cx, y);
-  return { svg, seats: xs.map((x) => seat(x, y)) };
+  return { svg, seats: xs.map((x) => seat(x, y)), blocks: [box(cx - 72, y - 52, 144, 116)] };
 }
 // 卡座：沙发靠背 + 桌子 · booth: sofa back behind, table in front
 function booth(xs, y, c, st) {
   const x0 = xs[0] - 66;
   const w = xs[xs.length - 1] - xs[0] + 132;
   let svg = R(x0, y - 62, w, 66, c) + R(x0 - 10, y - 30, 14, 34, c) + R(x0 + w - 4, y - 30, 14, 34, c) + R(x0 + 6, y - 56, w - 12, 6, '#FFFFFF22');
-  return { svg: svg + longTable(xs, y, { ...st, chair: () => '' }).svg, seats: xs.map((x) => seat(x, y)) };
+  const t = longTable(xs, y, { ...st, chair: () => '' });
+  return { svg: svg + t.svg, seats: t.seats, blocks: [box(x0 - 10, y - 62, w + 20, 62 + 32 + (st.legH || 40))] };
 }
 // 吧台 + 高脚凳 · bar counter with stools
 function barCounter(xs, y, st) {
@@ -54,19 +58,19 @@ function barCounter(xs, y, st) {
   let svg = xs.map((x) => R(x - 16, y - 10, 32, 12, st.stool)).join('');
   svg += R(x0, y, w, 18, st.top) + R(x0 + 6, y + 18, w - 12, 50, st.front) + R(x0 + 6, y + 30, w - 12, 4, '#00000022');
   if (st.deco) svg += between(xs).map((gx) => st.deco(gx, y)).join('');
-  return { svg, seats: xs.map((x) => seat(x, y)) };
+  return { svg, seats: xs.map((x) => seat(x, y)), blocks: [box(x0, y - 12, w, 80)] };
 }
 // 双人沙发 · two-seat sofa
 function sofa(cx, y, c) {
   const svg = R(cx - 96, y - 56, 192, 60, c) + R(cx - 108, y - 26, 20, 56, c) + R(cx + 88, y - 26, 20, 56, c) + R(cx - 96, y, 192, 28, c)
     + R(cx - 90, y + 2, 86, 6, '#FFFFFF33') + R(cx + 4, y + 2, 86, 6, '#FFFFFF33') + R(cx - 100, y + 28, 10, 8, '#3C4A5C') + R(cx + 90, y + 28, 10, 8, '#3C4A5C');
-  return { svg, seats: [seat(cx - 48, y), seat(cx + 48, y)] };
+  return { svg, seats: [seat(cx - 48, y, 'seat', 's'), seat(cx + 48, y, 'seat', 's')], blocks: [box(cx - 108, y - 56, 216, 92)] };
 }
 // 公园长椅 · park bench
 function bench(cx, y, c = '#B07A4A', leg = '#3C4A5C') {
   let svg = R(cx - 100, y - 50, 200, 10, c) + R(cx - 100, y - 34, 200, 10, c) + R(cx - 94, y - 50, 8, 60, leg) + R(cx + 86, y - 50, 8, 60, leg);
   svg += R(cx - 104, y, 208, 14, c) + R(cx - 94, y + 14, 8, 26, leg) + R(cx + 86, y + 14, 8, 26, leg);
-  return { svg, seats: [seat(cx - 48, y), seat(cx + 48, y)] };
+  return { svg, seats: [seat(cx - 48, y, 'seat', 's'), seat(cx + 48, y, 'seat', 's')], blocks: [box(cx - 104, y - 50, 208, 90)] };
 }
 // 矮桌 + 坐垫（坐地上）· low table with floor cushions (sit on the floor)
 function lowTable(cx, y, st) {
@@ -74,21 +78,21 @@ function lowTable(cx, y, st) {
   let svg = xs.map((x) => R(x - 30, y - 10, 60, 22, st.cushion) + R(x - 26, y - 8, 52, 4, '#FFFFFF33')).join('');
   svg += R(cx - 26, y - 22, 52, 10, st.top) + R(cx - 22, y - 12, 6, 16, st.leg) + R(cx + 16, y - 12, 6, 16, st.leg);
   if (st.deco) svg += st.deco(cx, y - 30);
-  return { svg, seats: xs.map((x) => seat(x, y, 'ground')) };
+  return { svg, seats: xs.map((x) => seat(x, y, 'ground', 's')), blocks: [box(cx - 82, y - 24, 164, 36)] };
 }
 // 野餐垫（坐草地上）· picnic blanket on the grass
 function blanket(cx, y, c = '#C94F3D') {
   let svg = R(cx - 104, y - 22, 208, 44, '#FBF2E6');
   for (let x = cx - 104, k = 0; x < cx + 104; x += 26, k++) svg += R(x, y - 22 + (k % 2) * 22, 26, 22, c);
   svg += R(cx - 14, y - 30, 28, 22, '#B07A4A') + R(cx - 10, y - 38, 20, 6, '#8C4F33') + R(cx - 8, y - 2, 16, 10, '#3B5BA9');
-  return { svg, seats: [seat(cx - 52, y, 'ground'), seat(cx + 52, y, 'ground')] };
+  return { svg, seats: [seat(cx - 52, y, 'ground', 's'), seat(cx + 52, y, 'ground', 's')], blocks: [box(cx - 104, y - 38, 208, 60)] };
 }
 // 沙滩巾（坐沙滩上）· beach towels on the sand
 function towels(cx, y, c1 = '#3B7FC4', c2 = '#F07F6A') {
   let svg = '';
   [[cx - 52, c1], [cx + 52, c2]].forEach(([x, c]) => { svg += R(x - 34, y - 26, 68, 50, c); for (let i = 0; i < 3; i++) svg += R(x - 34, y - 18 + i * 16, 68, 5, '#FFFFFF66'); });
   svg += R(cx - 10, y - 4, 20, 16, '#E3A72F') + R(cx - 6, y - 10, 12, 6, '#E3A72F');
-  return { svg, seats: [seat(cx - 52, y, 'ground'), seat(cx + 52, y, 'ground')] };
+  return { svg, seats: [seat(cx - 52, y, 'ground', 's'), seat(cx + 52, y, 'ground', 's')], blocks: [box(cx - 86, y - 26, 172, 50)] };
 }
 // 遮阳伞（画在后面）· beach umbrella (background)
 const umbrella = (cx, y, c = '#F07F6A') => R(cx - 3, y - 150, 6, 150, '#8C4F33') + R(cx - 96, y - 160, 192, 16, c) + R(cx - 70, y - 174, 140, 16, c) + R(cx - 30, y - 174, 30, 30, '#FBF2E6');
@@ -167,6 +171,7 @@ const SCENES = {
       sofa(290, 598, '#3E6B5A'), sofa(710, 598, '#A23E5A'),
     ],
     sign: (n) => sign(n, 10),
+    floor: 214,
   },
   cafe: {
     bg() {
@@ -182,6 +187,7 @@ const SCENES = {
       barCounter([640, 750, 860], 525, { stool: '#3C4A5C', top: '#8C4F33', front: '#5E3523', deco: cups }),
     ],
     sign: (n) => sign(n, 8, '#D9694B'),
+    floor: 224, extra: [box(436, 536, 48, 104)],
   },
   teahouse: {
     bg() {
@@ -194,6 +200,7 @@ const SCENES = {
       lowTable(200, 555, TEA_LOW), lowTable(500, 555, TEA_LOW), lowTable(800, 555, TEA_LOW),
     ],
     sign: (n) => sign(n, 120, '#2B1D14', '#D9A93B'),
+    floor: 234,
   },
   shop: {
     bg() {
@@ -204,6 +211,7 @@ const SCENES = {
     },
     items: () => [barCounter([150, 290, 430, 570, 710, 850], 320, SHOP_BAR), roundTable(260, 525, SHOP), roundTable(740, 525, SHOP)],
     sign: (n) => sign(n, 186, '#3B7FC4'),
+    floor: 244,
   },
   lab: {
     bg() {
@@ -217,6 +225,7 @@ const SCENES = {
       longTable([140, 260, 380], 525, LAB), roundTable(760, 525, { ...OFFICE, top: '#9CCBDB', apron: '#7E97AD', deco: books }),
     ],
     sign: (n) => sign(n, 140, '#7E97AD'),
+    floor: 234,
   },
   tower: {
     bg: () => R(0, 0, 1000, 250, '#5E6B78') + windowSky(30, 20, 940, 210) + tiles(250, '#C9C2B4', '#BDB5A6', 80) + R(470, 470, 60, 120, '#6FA85A') + R(482, 590, 36, 40, '#9AA7B4'),
@@ -225,6 +234,7 @@ const SCENES = {
       sofa(260, 560, '#3C4A5C'), roundTable(760, 545, { ...OFFICE, chair: chairOf('#C9705A', '#A2523F'), deco: cups }),
     ],
     sign: (n) => sign(n, 186, '#2E7D5B'),
+    floor: 254, extra: [box(466, 466, 68, 160)],
   },
   temple: {
     bg() {
@@ -238,6 +248,7 @@ const SCENES = {
       blanket(280, 580, '#3E6B5A'), blanket(720, 580, '#C94F3D'),
     ],
     sign: (n) => sign(n, 186, '#3C4A5C', '#D9A93B'),
+    floor: 254, extra: [box(20, 230, 100, 100), box(880, 230, 100, 100)],
   },
   park: {
     bg() {
@@ -250,6 +261,7 @@ const SCENES = {
       blanket(190, 565, '#C94F3D'), blanket(500, 565, '#3B7FC4'), blanket(810, 565, '#E3A72F'),
     ],
     sign: (n) => sign(n, 30, '#5E8F4A'),
+    floor: 214,
   },
   lake: {
     bg() {
@@ -263,6 +275,7 @@ const SCENES = {
       blanket(190, 568, '#1F6F8B'), blanket(500, 568, '#C94F3D'), blanket(810, 568, '#6B4FA0'),
     ],
     sign: (n) => sign(n, 16, '#1F6F8B'),
+    floor: 266,
   },
   beach: {
     bg: () => R(0, 0, 1000, 80, '#BFE3F0') + R(0, 80, 1000, 140, '#5FA8C9') + R(0, 200, 1000, 30, '#BFE3F0') + R(0, 220, 1000, 420, '#F2E3B3') + umbrella(250, 400) + umbrella(750, 400, '#2E9E5B'),
@@ -271,6 +284,7 @@ const SCENES = {
       towels(190, 575), towels(500, 575, '#2E9E5B', '#E3A72F'), towels(810, 575, '#6B4FA0', '#3B7FC4'),
     ],
     sign: (n) => sign(n, 110, '#F07F6A'),
+    floor: 230, extra: [box(244, 240, 12, 160), box(744, 240, 12, 160)],
   },
 };
 
@@ -285,6 +299,15 @@ const SPECIAL = {
       { y: 330, seats: [220, 360, 500, 640, 780] },
       { y: 480, seats: [200, 340, 660, 800] },
       { y: 612, seats: [250, 400, 600, 750] },
+    ],
+    floor: 258,
+    blocks: [
+      box(0, 254, 100, 386), box(900, 254, 100, 386), // 两侧书架 side shelves
+      box(160, 280, 680, 106), // 长桌 + 椅子 long table and chairs
+      box(118, 430, 304, 102), box(578, 430, 304, 102), // 两张学习桌 study tables
+      box(450, 404, 100, 132), // 盆栽 plant
+      ...[250, 400, 600, 750].map((x) => box(x - 42, 558, 84, 82)), // 扶手椅 armchairs
+      ...[325, 675].map((x) => box(x - 24, 588, 48, 52)), // 边桌 side tables
     ],
     art(name) {
       let s = R(0, 0, 1000, 640, '#F4F1EA');
@@ -315,12 +338,12 @@ const SPECIAL = {
       // 第一排：长桌，五个座位，彩色北欧椅 · row 1: long shared table, five seats, coloured chairs
       const chairCols = ['#D9A93B', '#1F6F8B', '#C9705A', '#2E7D5B', '#D9A93B'];
       [220, 360, 500, 640, 780].forEach((x, i) => { s += R(x - 20, 288, 40, 46, chairCols[i]) + R(x - 23, 282, 46, 8, '#FFFFFF33'); });
-      s += R(180, 360, 10, 40, '#FFFFFF') + R(810, 360, 10, 40, '#FFFFFF') + R(160, 330, 680, 22, BIRCH) + R(160, 352, 680, 8, '#C9A97A');
+      s += R(180, 360, 10, 24, '#FFFFFF') + R(810, 360, 10, 24, '#FFFFFF') + R(160, 330, 680, 22, BIRCH) + R(160, 352, 680, 8, '#C9A97A');
       [290, 430, 570, 710].forEach((x, i) => { s += i % 2 ? R(x - 16, 332, 30, 6, '#C94F3D') + R(x - 12, 326, 26, 6, '#1F6F8B') : R(x - 18, 334, 14, 12, '#FFFFFF') + R(x + 2, 334, 18, 12, '#9CCBDB'); });
       // 第二排：两张小桌 + 中间大盆栽 · row 2: two tables with a big plant between
       [[270, [200, 340]], [730, [660, 800]]].forEach(([cx, seats]) => {
         seats.forEach((x, i) => { s += R(x - 20, 438, 40, 46, i ? '#1F6F8B' : '#C9705A') + R(x - 23, 432, 46, 8, '#FFFFFF33'); });
-        s += R(cx - 135, 510, 10, 36, '#FFFFFF') + R(cx + 125, 510, 10, 36, '#FFFFFF') + R(cx - 150, 480, 300, 22, BIRCH) + R(cx - 150, 502, 300, 8, '#C9A97A');
+        s += R(cx - 135, 510, 10, 20, '#FFFFFF') + R(cx + 125, 510, 10, 20, '#FFFFFF') + R(cx - 150, 480, 300, 22, BIRCH) + R(cx - 150, 502, 300, 8, '#C9A97A');
         s += R(cx - 12, 466, 4, 20, '#3C4A5C') + R(cx - 24, 458, 28, 10, '#2B2F36') + R(cx + 6, 482, 26, 8, '#F4F1EA');
       });
       s += R(474, 480, 52, 54, '#FFFFFF') + R(478, 484, 44, 4, '#DDD8CE') + R(452, 430, 96, 52, '#5E8F4A') + R(466, 412, 68, 22, '#6FA85A') + R(488, 404, 26, 12, '#7FB069');
@@ -341,9 +364,134 @@ const sceneFor = (kind, key) => SPECIAL[key] || SCENES[kind] || SCENES.library;
 
 // 座位列表（扁平）· flat seat list; key = "city/place" picks a place-specific scene if there is one
 export function seatsOf(kind, key) {
+  return layoutOf(kind, key).seats;
+}
+
+// 座位 + 障碍物 + 地面上沿 · seats, obstacles and where the floor starts
+const layoutCache = new Map();
+export function layoutOf(kind, key) {
+  const id = `${kind}|${key}`;
+  if (layoutCache.has(id)) return layoutCache.get(id);
   const sc = sceneFor(kind, key);
-  if (sc.items) return sc.items().flatMap((it) => it.seats);
-  return sc.seats.flatMap((t) => t.seats.map((x) => seat(x, t.y, t.pose)));
+  let out;
+  if (sc.items) {
+    const items = sc.items();
+    out = { seats: items.flatMap((it) => it.seats), blocks: [...items.flatMap((it) => it.blocks || []), ...(sc.extra || [])], floor: sc.floor || 0 };
+  } else {
+    out = { seats: sc.seats.flatMap((t) => t.seats.map((x) => seat(x, t.y, t.pose))), blocks: sc.blocks || [], floor: sc.floor || 0 };
+  }
+  layoutCache.set(id, out);
+  return out;
+}
+
+/* ---------- 绕开桌子走路：网格 A* · walking around furniture: grid A* ---------- */
+const CELL = 10;
+const GW = 100;
+const GH = 64;
+const PAD = 6; // 和家具保持的距离 · clearance from furniture
+
+function gridOf(layout) {
+  if (layout.grid) return layout.grid;
+  const g = new Uint8Array(GW * GH);
+  for (let gy = 0; gy < GH; gy++) {
+    for (let gx = 0; gx < GW; gx++) {
+      const x = gx * CELL + CELL / 2;
+      const y = gy * CELL + CELL / 2;
+      const blocked = y < layout.floor || layout.blocks.some((b) => x > b.x - PAD && x < b.x + b.w + PAD && y > b.y - PAD && y < b.y + b.h + PAD);
+      g[gy * GW + gx] = blocked ? 1 : 0;
+    }
+  }
+  layout.grid = g;
+  return g;
+}
+const cellOf = (p) => [Math.max(0, Math.min(GW - 1, Math.floor(p.x / CELL))), Math.max(0, Math.min(GH - 1, Math.floor(p.y / CELL)))];
+const centre = (gx, gy) => ({ x: gx * CELL + CELL / 2, y: gy * CELL + CELL / 2 });
+
+// 离某点最近的空地格子 · nearest walkable cell to a point
+function nearestFree(g, p) {
+  const [cx, cy] = cellOf(p);
+  if (!g[cy * GW + cx]) return [cx, cy];
+  for (let r = 1; r < GW; r++) {
+    let best = null;
+    let bd = Infinity;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x < 0 || y < 0 || x >= GW || y >= GH || g[y * GW + x]) continue;
+        const d = dx * dx + dy * dy;
+        if (d < bd) { bd = d; best = [x, y]; }
+      }
+    }
+    if (best) return best;
+  }
+  return [cx, cy];
+}
+
+// 4 方向 A*，拐弯有额外代价，走出来是横平竖直的路线 · 4-way A* with a turn penalty → tidy right-angled routes
+function astar(g, [sx, sy], [tx, ty]) {
+  const N = GW * GH;
+  const cost = new Float64Array(N * 4).fill(Infinity);
+  const prev = new Int32Array(N * 4).fill(-1);
+  const DX = [1, -1, 0, 0];
+  const DY = [0, 0, 1, -1];
+  const open = []; // 小顶堆 [f, state] · binary min-heap
+  const push = (f, st) => { open.push([f, st]); let i = open.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (open[p][0] <= open[i][0]) break; [open[p], open[i]] = [open[i], open[p]]; i = p; } };
+  const pop = () => { const top = open[0]; const last = open.pop(); if (open.length) { open[0] = last; let i = 0; for (;;) { const l = 2 * i + 1; const r = l + 1; let m = i; if (l < open.length && open[l][0] < open[m][0]) m = l; if (r < open.length && open[r][0] < open[m][0]) m = r; if (m === i) break; [open[m], open[i]] = [open[i], open[m]]; i = m; } } return top; };
+  const h = (x, y) => Math.abs(x - tx) + Math.abs(y - ty);
+  for (let d = 0; d < 4; d++) { cost[(sy * GW + sx) * 4 + d] = 0; push(h(sx, sy), (sy * GW + sx) * 4 + d); }
+  while (open.length) {
+    const [, st] = pop();
+    const c = st >> 2;
+    const d = st & 3;
+    const x = c % GW;
+    const y = (c - x) / GW;
+    if (x === tx && y === ty) {
+      const cells = [];
+      for (let s = st; s !== -1; s = prev[s]) cells.push(s >> 2);
+      return cells.reverse().map((k) => [k % GW, Math.floor(k / GW)]);
+    }
+    for (let nd = 0; nd < 4; nd++) {
+      const nx = x + DX[nd];
+      const ny = y + DY[nd];
+      if (nx < 0 || ny < 0 || nx >= GW || ny >= GH || g[ny * GW + nx]) continue;
+      const ns = (ny * GW + nx) * 4 + nd;
+      const nc = cost[st] + 1 + (nd !== d ? 3 : 0);
+      if (nc < cost[ns]) { cost[ns] = nc; prev[ns] = st; push(nc + h(nx, ny), ns); }
+    }
+  }
+  return null;
+}
+
+// 只保留拐点 · keep only the corners
+function corners(pts) {
+  return pts.filter((p, i) => {
+    if (i === 0 || i === pts.length - 1) return true;
+    const a = pts[i - 1];
+    const b = pts[i + 1];
+    return !((a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y));
+  });
+}
+
+// 座位旁边能站的地方：桌子后面的过道或前面 · where you stand next to a seat (aisle behind the desk, or in front)
+const approach = (s) => ({ x: s.x, y: s.from === 's' ? s.y + 52 : s.y - 62 });
+
+// 从 start 走到 seats[to]；fromSeat 表示先从那个座位站起来 · route from start to seats[to]; fromSeat = stand up from that seat first
+export function walkPath(kind, key, start, to, fromSeat = null) {
+  const layout = layoutOf(kind, key);
+  const g = gridOf(layout);
+  const target = layout.seats[to];
+  const pts = [start];
+  const from = fromSeat !== null && layout.seats[fromSeat] ? approach(layout.seats[fromSeat]) : start;
+  const a = nearestFree(g, from);
+  const b = nearestFree(g, approach(target));
+  if (fromSeat !== null) pts.push(centre(...a));
+  const cells = astar(g, a, b);
+  if (cells) pts.push(...corners(cells.map(([x, y]) => centre(x, y))));
+  else pts.push(centre(...b));
+  pts.push({ x: target.x, y: target.y });
+  return pts.filter((p, k) => k === 0 || Math.hypot(p.x - pts[k - 1].x, p.y - pts[k - 1].y) > 0.5);
 }
 
 export function interiorSVG(kind, name, key) {
