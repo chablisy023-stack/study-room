@@ -10,58 +10,58 @@ export const SLOTS = [
   { x: 220, y: 170 }, { x: 780, y: 165 }, { x: 225, y: 470 }, { x: 775, y: 470 },
 ];
 
-// 解锁顺序 = 数组顺序；cost 金币，hours = 在上一座城累计专注小时数（「通关」）
+// 解锁顺序 = 数组顺序；cost = 解锁需要的金币（只能用金币解锁）· unlock order = array order; cost = coins needed (coins only)
 export const CITIES = [
-  { id: 'linkoping', zh: '林雪平', en: 'Linköping', wx: 520, wy: 98, lbl: 'top', ground: '#BFD9A8', landmark: 'spire', cost: 0, hours: 0,
+  { id: 'linkoping', zh: '林雪平', en: 'Linköping', wx: 520, wy: 98, lbl: 'top', ground: '#BFD9A8', landmark: 'spire', cost: 0,
     places: [
       { id: 'lib', kind: 'library', zh: '林雪平市立图书馆', en: 'Linköping City Library' },
       { id: 'fika', kind: 'cafe', zh: 'Kårallen 学生会馆', en: 'Kårallen Student Union' },
       { id: 'roxen', kind: 'lake', zh: '罗克森湖', en: 'Lake Roxen' },
       { id: 'lab', kind: 'lab', zh: 'Campus US 医学院', en: 'Campus US (Medicine)' },
     ] },
-  { id: 'beijing', zh: '北京', en: 'Beijing', wx: 760, wy: 178, lbl: 'left', ground: '#CCD8A4', landmark: 'gate', cost: 30, hours: 1,
+  { id: 'beijing', zh: '北京', en: 'Beijing', wx: 760, wy: 178, lbl: 'left', ground: '#CCD8A4', landmark: 'gate', cost: 30,
     places: [
       { id: 'lib', kind: 'library', zh: '国家图书馆', en: 'National Library' },
       { id: 'tea', kind: 'teahouse', zh: '老舍茶馆', en: 'Lao She Teahouse' },
       { id: 'lake', kind: 'lake', zh: '北大未名湖', en: 'Weiming Lake (PKU)' },
       { id: 'temple', kind: 'temple', zh: '天坛公园', en: 'Temple of Heaven Park' },
     ] },
-  { id: 'london', zh: '伦敦', en: 'London', wx: 450, wy: 140, lbl: 'left', ground: '#B6D2A3', landmark: 'clock', cost: 50, hours: 1.5,
+  { id: 'london', zh: '伦敦', en: 'London', wx: 450, wy: 140, lbl: 'left', ground: '#B6D2A3', landmark: 'clock', cost: 50,
     places: [
       { id: 'lib', kind: 'library', zh: '大英图书馆', en: 'British Library' },
       { id: 'cafe', kind: 'shop', zh: '博罗市场', en: 'Borough Market' },
       { id: 'thames', kind: 'lake', zh: '泰晤士河南岸', en: 'South Bank' },
       { id: 'park', kind: 'park', zh: '海德公园', en: 'Hyde Park' },
     ] },
-  { id: 'paris', zh: '巴黎', en: 'Paris', wx: 505, wy: 185, lbl: 'bottom', ground: '#C4DBA9', landmark: 'eiffel', cost: 80, hours: 2,
+  { id: 'paris', zh: '巴黎', en: 'Paris', wx: 505, wy: 185, lbl: 'bottom', ground: '#C4DBA9', landmark: 'eiffel', cost: 80,
     places: [
       { id: 'lib', kind: 'library', zh: '圣日内维耶图书馆', en: 'Ste-Geneviève Library' },
       { id: 'cafe', kind: 'cafe', zh: '花神咖啡馆', en: 'Café de Flore' },
       { id: 'seine', kind: 'lake', zh: '塞纳河新桥', en: 'Pont Neuf' },
       { id: 'garden', kind: 'park', zh: '卢森堡公园', en: 'Luxembourg Gardens' },
     ] },
-  { id: 'tokyo', zh: '东京', en: 'Tokyo', wx: 886, wy: 212, lbl: 'bottom', ground: '#C7DDB0', landmark: 'torii', cost: 120, hours: 2.5,
+  { id: 'tokyo', zh: '东京', en: 'Tokyo', wx: 886, wy: 212, lbl: 'bottom', ground: '#C7DDB0', landmark: 'torii', cost: 120,
     places: [
       { id: 'lib', kind: 'library', zh: '国立国会图书馆', en: 'National Diet Library' },
       { id: 'cat', kind: 'cafe', zh: '神保町咖啡馆', en: 'Jimbocho Kissaten' },
       { id: 'shrine', kind: 'temple', zh: '明治神宫', en: 'Meiji Jingu' },
       { id: 'konbini', kind: 'shop', zh: '秋叶原', en: 'Akihabara' },
     ] },
-  { id: 'seoul', zh: '首尔', en: 'Seoul', wx: 836, wy: 168, lbl: 'top', ground: '#C2D9A6', landmark: 'palace', cost: 160, hours: 3,
+  { id: 'seoul', zh: '首尔', en: 'Seoul', wx: 836, wy: 168, lbl: 'top', ground: '#C2D9A6', landmark: 'palace', cost: 160,
     places: [
       { id: 'lib', kind: 'library', zh: 'COEX 星空图书馆', en: 'Starfield Library (COEX)' },
       { id: 'cafe', kind: 'cafe', zh: '延南洞咖啡街', en: 'Yeonnam-dong Cafés' },
       { id: 'palace', kind: 'temple', zh: '景福宫', en: 'Gyeongbokgung Palace' },
       { id: 'han', kind: 'lake', zh: '汝矣岛汉江公园', en: 'Yeouido Hangang Park' },
     ] },
-  { id: 'newyork', zh: '纽约', en: 'New York', wx: 292, wy: 190, lbl: 'bottom', ground: '#BCD6A6', landmark: 'skyline', cost: 200, hours: 3.5,
+  { id: 'newyork', zh: '纽约', en: 'New York', wx: 292, wy: 190, lbl: 'bottom', ground: '#BCD6A6', landmark: 'skyline', cost: 200,
     places: [
       { id: 'lib', kind: 'library', zh: '纽约公共图书馆', en: 'NY Public Library' },
       { id: 'cafe', kind: 'cafe', zh: '格林威治村咖啡馆', en: 'Greenwich Village Café' },
       { id: 'park', kind: 'park', zh: '中央公园', en: 'Central Park' },
       { id: 'roof', kind: 'tower', zh: '洛克菲勒中心', en: 'Rockefeller Center' },
     ] },
-  { id: 'sydney', zh: '悉尼', en: 'Sydney', wx: 890, wy: 440, lbl: 'bottom', ground: '#C9DDA8', landmark: 'opera', cost: 250, hours: 4,
+  { id: 'sydney', zh: '悉尼', en: 'Sydney', wx: 890, wy: 440, lbl: 'bottom', ground: '#C9DDA8', landmark: 'opera', cost: 250,
     places: [
       { id: 'lib', kind: 'library', zh: '新州州立图书馆', en: 'State Library of NSW' },
       { id: 'cafe', kind: 'cafe', zh: '环形码头咖啡馆', en: 'Circular Quay Café' },

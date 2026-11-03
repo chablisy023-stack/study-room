@@ -25,7 +25,6 @@ const state = {
   },
   coins: lsGet('st-coins', 0),
   unlocked: lsGet('st-unlocked', ['linkoping']),
-  cityFocus: lsGet('st-cityfocus', {}),
   coinAcc: 0,
   inTown: false,
   view: 'town',
@@ -666,12 +665,8 @@ function renderUnlock() {
   buy.textContent = t.unlockCoins(c.cost);
   buy.disabled = !prevOk || state.coins < c.cost;
   $('buy-note').textContent = !prevOk ? t.needPrev(L(prev)) : (state.coins < c.cost ? t.notEnough(c.cost - state.coins) : '');
-  const need = Math.round(c.hours * 60);
-  const done = Math.min(need, Math.floor((state.cityFocus[prev.id] || 0) / 60));
-  $('quest-text').textContent = t.unlockQuest(L(prev), c.hours);
-  $('quest-bar').style.width = `${(done / need) * 100}%`;
-  $('quest-progress').textContent = t.questProgress(done, need);
-  $('quest-btn').disabled = !prevOk || done < need;
+  $('coin-bar').style.width = `${Math.min(1, state.coins / c.cost) * 100}%`;
+  $('coin-progress').textContent = t.coinProgress(Math.min(state.coins, c.cost), c.cost);
 }
 
 function renderMessages() {
@@ -754,7 +749,6 @@ async function flush() {
     const s = state.pendingSecs;
     state.pendingSecs = 0;
     addMyDay(s);
-    lsSet('st-cityfocus', state.cityFocus);
     try { await backend.addStudy(s, state.profile.name); } catch (e) { console.warn(e); }
   }
 }
@@ -819,15 +813,16 @@ function openUnlock(cityId) {
   $('unlock').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function unlock(cityId, viaCoins) {
-  const c = cityById(cityId);
-  if (state.unlocked.includes(cityId)) return;
-  if (viaCoins) {
-    if (state.coins < c.cost) return;
-    state.coins -= c.cost;
-    lsSet('st-coins', state.coins);
-    renderCoins(true);
-  }
+// 解锁城市：只能用金币，而且要先解锁前一座 · unlock a city: coins only, and the previous city first
+function unlock(cityId) {
+  const i = CITIES.findIndex((x) => x.id === cityId);
+  const c = CITIES[i];
+  if (!c || state.unlocked.includes(cityId)) return;
+  if (i > 0 && !state.unlocked.includes(CITIES[i - 1].id)) return;
+  if (state.coins < c.cost) return;
+  state.coins -= c.cost;
+  lsSet('st-coins', state.coins);
+  renderCoins(true);
   state.unlocked = [...state.unlocked, cityId];
   lsSet('st-unlocked', state.unlocked);
   toast(T().unlocked(L(c)));
@@ -873,8 +868,7 @@ document.addEventListener('click', (e) => {
   else if (a === 'town') { state.view = 'town'; renderMap(); }
   else if (a === 'sound') { state.sound = !state.sound; lsSet('st-sound', state.sound); syncSound(); }
   else if (a === 'close-unlock') { state.unlockTarget = null; renderUnlock(); }
-  else if (a === 'buy' && state.unlockTarget) unlock(state.unlockTarget, true);
-  else if (a === 'quest' && state.unlockTarget) unlock(state.unlockTarget, false);
+  else if (a === 'buy' && state.unlockTarget) unlock(state.unlockTarget);
 });
 $('vol').addEventListener('input', (e) => { state.vol = Number(e.target.value); lsSet('st-vol', state.vol); setVolume(state.vol / 100); });
 
@@ -884,7 +878,6 @@ setInterval(() => {
   if (state.status === 'focus') {
     state.sessionSecs++;
     state.pendingSecs++;
-    state.cityFocus[state.profile.city] = (state.cityFocus[state.profile.city] || 0) + 1;
     state.coinAcc++;
     if (state.coinAcc >= 60) {
       state.coinAcc = 0;
@@ -913,7 +906,6 @@ setInterval(() => { if (state.inTown) renderBoard(); }, 60000);
 window.addEventListener('pagehide', () => {
   if (state.inTown && state.pendingSecs) {
     addMyDay(state.pendingSecs);
-    lsSet('st-cityfocus', state.cityFocus);
     backend.addStudy(state.pendingSecs, state.profile.name);
     state.pendingSecs = 0;
   }
